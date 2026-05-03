@@ -473,10 +473,6 @@ npm test
 - [ ] **Scheduled scans**: Automatic scanning based on frequency
 - [ ] **Email notifications**: Alert on critical findings
 - [ ] **Webhook support**: Integrate with SIEM/ticketing systems
-- [ ] **Export functionality**: CSV/JSON/PDF reports
-
-- [ ] **Dark web monitoring**: Paste sites, forums
-- [ ] **Automated remediation**: Create GitHub issues/PRs
 - [ ] **ML-based detection**: Reduce false positives
 - [ ] **Team workspaces**: Multi-user collaboration
 
