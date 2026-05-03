@@ -1,0 +1,124 @@
+// Prisma Schema for GITHUBRECON
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  githubId  String?  @unique
+  apiKey    String?  // Encrypted GitHub token
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  domains   Domain[]
+  scans     Scan[]
+
+  @@index([email])
+}
+
+model Domain {
+  id            String    @id @default(uuid())
+  name          String
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  active        Boolean   @default(true)
+  scanFrequency String    @default("manual") // manual, hourly, daily, weekly
+  lastScanAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  scans         Scan[]
+
+  // Compound unique constraint: each user can have one domain with a given name
+  @@unique([userId, name])
+  @@index([userId])
+  @@index([active, lastScanAt])
+  @@index([name])
+}
+
+model Scan {
+  id            String     @id @default(uuid())
+  domainId      String
+  domain        Domain     @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        String     @default("QUEUED")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  totalFindings Int        @default(0)
+  criticalCount Int        @default(0)
+  highCount     Int        @default(0)
+  mediumCount   Int        @default(0)
+  lowCount      Int        @default(0)
+  infoCount     Int        @default(0)
+  errorMessage  String?
+  createdAt     DateTime   @default(now())
+  findings      Finding[]
+
+  @@index([domainId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Finding {
+  id             String       @id @default(uuid())
+  scanId         String
+  scan           Scan         @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  repository     String
+  repositoryUrl  String
+  filePath       String
+  fileUrl        String?
+  commitSha      String?
+  commitUrl      String?
+  commitDate     DateTime?
+  gistId         String?
+  issueNumber    Int?
+  score          Float        @default(0) // Criticality score 0-100 (File-level aggregate)
+  primaryType    String       // Type of highest-scoring secret, e.g., "AWS_SECRET_KEY"
+  criticality    String       // e.g., "CRITICAL", "HIGH" based on file score
+  verified       Boolean      @default(false)
+  falsePositive  Boolean      @default(false)
+  acknowledged   Boolean      @default(false)
+  notes          String?
+  secrets        Secret[]     // One file can have many secrets
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([scanId])
+  @@index([primaryType])
+  @@index([criticality])
+  @@index([repository])
+  @@index([verified, falsePositive])
+}
+
+model Secret {
+  id             String       @id @default(uuid())
+  findingId      String
+  finding        Finding      @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  type           String       // E.g., "AWS_ACCESS_KEY", "EMAIL"
+  criticality    String       // E.g., "CRITICAL", "INFO"
+  content        String
+  contentPreview String
+  context        String
+  lineNumber     Int?
+  createdAt      DateTime     @default(now())
+
+  @@index([findingId])
+  @@index([type])
+  @@index([content])
+}
+
+// SQLite doesn't support enums, so we use strings with comments for valid values
+
+// Role: "USER" | "ADMIN"
+// ScanStatus: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED"
+// FindingType: "DOMAIN" | "EMAIL" | "API_KEY" | "AWS_ACCESS_KEY" | "AWS_SECRET_KEY" | "GITHUB_TOKEN" | "PRIVATE_KEY" | "PASSWORD" | "DATABASE_URL" | "SLACK_TOKEN" | "STRIPE_KEY" | "JWT_SECRET" | "GOOGLE_API_KEY" | "AZURE_KEY" | "SENDGRID_KEY" | "TWILIO_KEY" | "MAILCHIMP_KEY" | "DATADOG_KEY" | "NPM_TOKEN" | "DOCKER_PASSWORD" | "GENERIC_SECRET"
+// Criticality: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"

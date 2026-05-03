@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <rect width="100" height="100" fill="#0a0e27"/>
+
+  <!-- Outer shield -->
+  <path d="M 50 10 L 80 25 L 80 50 Q 80 75 50 85 Q 20 75 20 50 L 20 25 Z"
+        fill="none" stroke="#00ff9f" stroke-width="2.5"/>
+
+  <!-- Inner shield glow -->
+  <path d="M 50 10 L 80 25 L 80 50 Q 80 75 50 85 Q 20 75 20 50 L 20 25 Z"
+        fill="none" stroke="#00ff9f" stroke-width="1" opacity="0.3" filter="url(#glow)"/>
+
+  <!-- Shield lock icon -->
+  <circle cx="50" cy="45" r="8" fill="none" stroke="#00ff9f" stroke-width="2"/>
+  <rect x="47" y="52" width="6" height="10" fill="#00ff9f" rx="0.5"/>
+  <path d="M 46 52 Q 46 48 50 48 Q 54 48 54 52" fill="none" stroke="#00ff9f" stroke-width="1.5"/>
+
+  <!-- Glow effect -->
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>

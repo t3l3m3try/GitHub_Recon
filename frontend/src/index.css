@@ -1,0 +1,494 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cyberpunk Color Palette */
+:root {
+  --cyber-cyan: #00ff9f;
+  --cyber-blue: #00b8ff;
+  --cyber-electric: #001eff;
+  --cyber-magenta: #bd00ff;
+  --cyber-purple: #d600ff;
+
+  --cyber-bg-dark: #0a0e27;
+  --cyber-bg-darker: #050814;
+  --cyber-bg-card: #0f1535;
+
+  font-family: 'Rajdhani', 'Orbitron', 'Share Tech Mono', monospace, system-ui;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+
+  color-scheme: dark;
+  color: var(--cyber-cyan);
+  background-color: var(--cyber-bg-darker);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--cyber-bg-darker) 0%, #0a0520 50%, var(--cyber-bg-darker) 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Animated Grid Background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(var(--cyber-electric) 1px, transparent 1px),
+    linear-gradient(90deg, var(--cyber-electric) 1px, transparent 1px);
+  background-size: 50px 50px;
+  opacity: 0.05;
+  z-index: 0;
+  pointer-events: none;
+  animation: gridPulse 3s ease-in-out infinite;
+}
+
+@keyframes gridPulse {
+
+  0%,
+  100% {
+    opacity: 0.05;
+  }
+
+  50% {
+    opacity: 0.08;
+  }
+}
+
+/* Scanline Effect */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(0deg,
+      rgba(0, 255, 159, 0.03) 0px,
+      transparent 2px,
+      transparent 4px);
+  pointer-events: none;
+  z-index: 9999;
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(100px);
+  }
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Glitch Text Animation */
+@keyframes glitch {
+  0% {
+    text-shadow: 2px 2px var(--cyber-cyan), -2px -2px var(--cyber-magenta);
+  }
+
+  25% {
+    text-shadow: -2px 2px var(--cyber-blue), 2px -2px var(--cyber-purple);
+  }
+
+  50% {
+    text-shadow: 2px -2px var(--cyber-magenta), -2px 2px var(--cyber-cyan);
+  }
+
+  75% {
+    text-shadow: -2px -2px var(--cyber-purple), 2px 2px var(--cyber-blue);
+  }
+
+  100% {
+    text-shadow: 2px 2px var(--cyber-cyan), -2px -2px var(--cyber-magenta);
+  }
+}
+
+.glitch {
+  animation: glitch 0.3s ease-in-out infinite;
+}
+
+/* Neon Glow Effect */
+.neon-text {
+  text-shadow:
+    0 0 5px var(--cyber-cyan),
+    0 0 10px var(--cyber-cyan),
+    0 0 20px var(--cyber-cyan),
+    0 0 40px var(--cyber-blue);
+  animation: neonPulse 2s ease-in-out infinite;
+}
+
+@keyframes neonPulse {
+
+  0%,
+  100% {
+    text-shadow:
+      0 0 5px var(--cyber-cyan),
+      0 0 10px var(--cyber-cyan),
+      0 0 20px var(--cyber-cyan),
+      0 0 40px var(--cyber-blue);
+  }
+
+  50% {
+    text-shadow:
+      0 0 10px var(--cyber-cyan),
+      0 0 20px var(--cyber-cyan),
+      0 0 30px var(--cyber-blue),
+      0 0 60px var(--cyber-blue);
+  }
+}
+
+/* Neon Box Shadow */
+.neon-box {
+  box-shadow:
+    0 0 5px var(--cyber-cyan),
+    0 0 10px var(--cyber-cyan),
+    0 0 20px rgba(0, 255, 159, 0.5),
+    inset 0 0 20px rgba(0, 255, 159, 0.1);
+  border: 1px solid var(--cyber-cyan);
+}
+
+.neon-box-blue {
+  box-shadow:
+    0 0 5px var(--cyber-blue),
+    0 0 10px var(--cyber-blue),
+    0 0 20px rgba(0, 184, 255, 0.5),
+    inset 0 0 20px rgba(0, 184, 255, 0.1);
+  border: 1px solid var(--cyber-blue);
+}
+
+.neon-box-purple {
+  box-shadow:
+    0 0 5px var(--cyber-purple),
+    0 0 10px var(--cyber-purple),
+    0 0 20px rgba(214, 0, 255, 0.5),
+    inset 0 0 20px rgba(214, 0, 255, 0.1);
+  border: 1px solid var(--cyber-purple);
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-sm font-bold transition-all duration-300 uppercase tracking-wider text-sm;
+    font-family: 'Orbitron', monospace;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transition: width 0.6s, height 0.6s;
+  }
+
+  .btn:hover::before {
+    width: 300px;
+    height: 300px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--cyber-cyan) 0%, var(--cyber-blue) 100%);
+    color: #000;
+    box-shadow:
+      0 0 10px var(--cyber-cyan),
+      0 0 20px rgba(0, 255, 159, 0.5);
+    border: 1px solid var(--cyber-cyan);
+  }
+
+  .btn-primary:hover {
+    box-shadow:
+      0 0 20px var(--cyber-cyan),
+      0 0 40px var(--cyber-blue),
+      0 0 60px rgba(0, 255, 159, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, var(--cyber-electric) 0%, var(--cyber-blue) 100%);
+    color: #fff;
+    box-shadow:
+      0 0 10px var(--cyber-blue),
+      0 0 20px rgba(0, 184, 255, 0.5);
+    border: 1px solid var(--cyber-blue);
+  }
+
+  .btn-secondary:hover {
+    box-shadow:
+      0 0 20px var(--cyber-blue),
+      0 0 40px var(--cyber-electric),
+      0 0 60px rgba(0, 184, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .btn-danger {
+    background: linear-gradient(135deg, var(--cyber-magenta) 0%, var(--cyber-purple) 100%);
+    color: #fff;
+    box-shadow:
+      0 0 10px var(--cyber-magenta),
+      0 0 20px rgba(189, 0, 255, 0.5);
+    border: 1px solid var(--cyber-magenta);
+  }
+
+  .btn-danger:hover {
+    box-shadow:
+      0 0 20px var(--cyber-magenta),
+      0 0 40px var(--cyber-purple),
+      0 0 60px rgba(189, 0, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .card {
+    background: linear-gradient(135deg, rgba(15, 21, 53, 0.9) 0%, rgba(10, 14, 39, 0.95) 100%);
+    border: 1px solid rgba(0, 255, 159, 0.3);
+    border-radius: 4px;
+    padding: 1.5rem;
+    box-shadow:
+      0 0 20px rgba(0, 255, 159, 0.1),
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      inset 0 0 40px rgba(0, 255, 159, 0.05);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyber-cyan), transparent);
+    animation: cardScan 3s linear infinite;
+  }
+
+  @keyframes cardScan {
+    0% {
+      left: -100%;
+    }
+
+    100% {
+      left: 100%;
+    }
+  }
+
+  .card:hover {
+    border-color: var(--cyber-cyan);
+    box-shadow:
+      0 0 30px rgba(0, 255, 159, 0.2),
+      0 12px 48px rgba(0, 0, 0, 0.6),
+      inset 0 0 60px rgba(0, 255, 159, 0.08);
+  }
+
+  .input {
+    @apply w-full px-4 py-3 rounded-sm border bg-opacity-20 text-white font-mono;
+    background: rgba(15, 21, 53, 0.5);
+    border: 1px solid rgba(0, 184, 255, 0.5);
+    box-shadow:
+      inset 0 0 10px rgba(0, 184, 255, 0.1),
+      0 0 5px rgba(0, 184, 255, 0.3);
+    transition: all 0.3s ease;
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--cyber-cyan);
+    box-shadow:
+      inset 0 0 15px rgba(0, 255, 159, 0.2),
+      0 0 15px rgba(0, 255, 159, 0.5),
+      0 0 30px rgba(0, 255, 159, 0.3);
+    background: rgba(15, 21, 53, 0.7);
+  }
+
+  .input::placeholder {
+    color: rgba(0, 255, 159, 0.5);
+  }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cyber-bg-darker);
+  border-left: 1px solid rgba(0, 255, 159, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--cyber-cyan) 0%, var(--cyber-blue) 100%);
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 255, 159, 0.5);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--cyber-blue) 0%, var(--cyber-purple) 100%);
+  box-shadow: 0 0 20px rgba(0, 184, 255, 0.8);
+}
+
+/* Selection */
+::selection {
+  background: var(--cyber-cyan);
+  color: #000;
+}
+
+::-moz-selection {
+  background: var(--cyber-cyan);
+  color: #000;
+}
+
+/* Cyber Borders */
+.cyber-border-left {
+  border-left: 2px solid var(--cyber-cyan);
+  box-shadow: -4px 0 10px rgba(0, 255, 159, 0.3);
+}
+
+.cyber-border-top {
+  border-top: 2px solid var(--cyber-cyan);
+  box-shadow: 0 -4px 10px rgba(0, 255, 159, 0.3);
+}
+
+/* Loading Animation */
+@keyframes cyberPulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 20px var(--cyber-cyan);
+  }
+
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 40px var(--cyber-blue);
+  }
+}
+
+.cyber-pulse {
+  animation: cyberPulse 2s ease-in-out infinite;
+}
+
+/* Data Table Styling */
+table {
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Hover Effects */
+.hover-cyber:hover {
+  color: var(--cyber-cyan);
+  text-shadow: 0 0 10px var(--cyber-cyan);
+  transition: all 0.3s ease;
+}
+
+/* GUI Fixes for Criticality Classes — !important needed to beat Tailwind's
+   @utilities layer which resets border-color after custom CSS in the cascade */
+.crit-card-CRITICAL {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background: linear-gradient(to right, transparent, rgba(239, 68, 68, 0.05)) !important;
+  --hover-shadow: rgba(239, 68, 68, 0.25);
+  --hover-border: rgba(248, 113, 113, 1);
+}
+
+.crit-badge-CRITICAL {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+  color: rgba(252, 165, 165, 1) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+}
+
+.crit-card-HIGH {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+  background: linear-gradient(to right, transparent, rgba(249, 115, 22, 0.05)) !important;
+  --hover-shadow: rgba(249, 115, 22, 0.25);
+  --hover-border: rgba(251, 146, 60, 1);
+}
+
+.crit-badge-HIGH {
+  background-color: rgba(249, 115, 22, 0.2) !important;
+  color: rgba(253, 186, 116, 1) !important;
+  border-color: rgba(249, 115, 22, 0.6) !important;
+}
+
+.crit-card-MEDIUM {
+  border-color: rgba(234, 179, 8, 0.3) !important;
+  background: linear-gradient(to right, transparent, rgba(234, 179, 8, 0.05)) !important;
+  --hover-shadow: rgba(234, 179, 8, 0.2);
+  --hover-border: rgba(250, 204, 21, 1);
+}
+
+.crit-badge-MEDIUM {
+  background-color: rgba(234, 179, 8, 0.2) !important;
+  color: rgba(253, 224, 71, 1) !important;
+  border-color: rgba(234, 179, 8, 0.6) !important;
+}
+
+.crit-card-LOW {
+  border-color: rgba(6, 182, 212, 0.3) !important;
+  background: linear-gradient(to right, transparent, rgba(6, 182, 212, 0.05)) !important;
+  --hover-shadow: rgba(0, 255, 159, 0.2);
+  --hover-border: rgba(34, 211, 238, 1);
+}
+
+.crit-badge-LOW {
+  background-color: rgba(6, 182, 212, 0.2) !important;
+  color: rgba(103, 232, 249, 1) !important;
+  border-color: rgba(6, 182, 212, 0.6) !important;
+}
+
+.crit-card-INFO {
+  border-color: rgba(107, 114, 128, 0.3) !important;
+  background: linear-gradient(to right, transparent, rgba(107, 114, 128, 0.05)) !important;
+  --hover-shadow: rgba(156, 163, 175, 0.15);
+  --hover-border: rgba(156, 163, 175, 1);
+}
+
+.crit-badge-INFO {
+  background-color: rgba(55, 65, 81, 0.3) !important;
+  color: rgba(209, 213, 219, 1) !important;
+  border-color: rgba(107, 114, 128, 0.3) !important;
+}
+
+.crit-card-base {
+  border-width: 1px !important;
+  border-style: solid !important;
+}
+
+.crit-card-base:hover {
+  border-color: var(--hover-border) !important;
+  box-shadow: 0 0 15px var(--hover-shadow) !important;
+}
+
+.crit-box-purple {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+}
+
+.crit-box-cyan {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(6, 182, 212, 0.2) !important;
+}
