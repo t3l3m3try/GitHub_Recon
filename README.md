@@ -98,7 +98,6 @@ cp .env.example .env
 Edit `.env` and add your GitHub token:
 ```env
 GITHUB_TOKEN=your_github_personal_access_token_here
-JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
 ```
 
 3. **Start the application**
@@ -291,8 +290,6 @@ PORT=3001                         # API port
 DATABASE_URL="file:./dev.db"      # SQLite connection
 
 GITHUB_TOKEN=ghp_...              # GitHub API token
-JWT_SECRET=your-secret-key        # JWT signing key
-ENCRYPTION_KEY=32-char-key        # Data encryption
 
 RATE_LIMIT_WINDOW_MS=60000        # Rate limit window
 RATE_LIMIT_MAX_REQUESTS=100       # Max requests per window
@@ -413,9 +410,8 @@ npm test
 
 ### For Production Deployment
 
-1. **Change default secrets**
-   - Generate strong `JWT_SECRET` and `ENCRYPTION_KEY`
-   - Use environment-specific values
+1. **Environment Configuration**
+   - Use environment-specific values for production configuration
 
 2. **Enable HTTPS**
    - Use SSL certificates (Let's Encrypt)
