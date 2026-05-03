@@ -34,8 +34,8 @@ fi
 # Setup database
 echo "🗄️  Setting up SQLite database..."
 cd backend
-npx prisma generate
-DATABASE_URL="file:./dev.db" npx prisma db push --accept-data-loss
+npx prisma generate > /dev/null 2>&1
+DATABASE_URL="file:./dev.db" npx prisma db push --accept-data-loss > /dev/null 2>&1
 cd ..
 
 echo ""
@@ -50,5 +50,5 @@ echo ""
 
 # Start both servers
 npx concurrently -n "backend,frontend" -c "blue,green" \
-  "cd backend && NODE_ENV=development PORT=3001 DATABASE_URL=file:./dev.db npm run dev" \
-  "cd frontend && npm run dev"
+  "cd backend && NODE_ENV=development PORT=3001 DATABASE_URL=file:./dev.db npm run dev --silent" \
+  "cd frontend && npm run dev --silent"

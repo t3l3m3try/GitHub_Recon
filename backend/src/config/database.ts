@@ -47,7 +47,7 @@ export async function initializeDatabase() {
           role: 'USER'
         }
       });
-      logger.info('✅ Development user ready:', user.email);
+      logger.info(`✅ Development user ready: ${user.email}`);
     }
   } catch (error: any) {
     logger.error('⚠️  Database initialization error:', error.message);

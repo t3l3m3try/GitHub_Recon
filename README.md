@@ -1,4 +1,4 @@
-# GITHUBRECON
+# GitHub_Recon
 
 A comprehensive platform for detecting sensitive information and security vulnerabilities in public GitHub repositories. This platform helps organizations monitor their domains, email addresses, API keys, credentials, and other sensitive data that may have been accidentally exposed on GitHub.
 
