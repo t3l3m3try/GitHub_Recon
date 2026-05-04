@@ -8,9 +8,8 @@ import routes from './routes';
 import { logger } from './utils/logger';
 import { initializeDatabase } from './config/database';
 
-// Load environment variables — try root .env.local first, then local .env
-dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
-dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+// Load environment variables — try root .env first
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config(); // fallback: backend/.env
 
 const app = express();

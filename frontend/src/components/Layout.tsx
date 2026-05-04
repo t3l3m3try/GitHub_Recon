@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, AlertTriangle, Globe } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, Globe, Shield } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
@@ -9,47 +9,56 @@ export default function Layout() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="neon-box-blue cyber-border-top backdrop-blur-sm bg-opacity-90 sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
+      <header className="sticky top-0 z-50 backdrop-blur-xl" style={{
+        background: 'rgba(11, 15, 25, 0.85)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+      }}>
+        <div className="container mx-auto px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <AlertTriangle className="w-8 h-8 text-cyber-cyan animate-pulse" style={{ filter: 'drop-shadow(0 0 10px var(--cyber-cyan))' }} />
-              <h1 className="text-3xl font-bold neon-text" style={{ fontFamily: 'Orbitron, monospace' }}>
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg" style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.15))',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+              }}>
+                <Shield className="w-5 h-5 text-blue-400" />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight" style={{
+                background: 'linear-gradient(135deg, #F9FAFB, #9CA3AF)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}>
                 GITHUB RECON
               </h1>
             </div>
-            <nav className="flex space-x-4">
+            <nav className="flex space-x-1">
               <Link
                 to="/dashboard"
-                className={`flex items-center space-x-2 px-5 py-2 rounded-sm transition-all duration-300 uppercase tracking-wider text-sm border ${isActive('/dashboard')
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 border-cyan-400 text-black font-bold shadow-[0_0_20px_rgba(0,255,159,0.5)]'
-                  : 'border-blue-500/30 text-cyan-300 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,255,159,0.3)] hover-cyber'
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium ${isActive('/dashboard')
+                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5 border border-transparent'
                   }`}
-                style={{ fontFamily: 'Rajdhani, sans-serif' }}
               >
-                <LayoutDashboard className="w-5 h-5" />
+                <LayoutDashboard className="w-4 h-4" />
                 <span>Dashboard</span>
               </Link>
               <Link
                 to="/findings"
-                className={`flex items-center space-x-2 px-5 py-2 rounded-sm transition-all duration-300 uppercase tracking-wider text-sm border ${isActive('/findings')
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 border-cyan-400 text-black font-bold shadow-[0_0_20px_rgba(0,255,159,0.5)]'
-                  : 'border-blue-500/30 text-cyan-300 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,255,159,0.3)] hover-cyber'
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium ${isActive('/findings')
+                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5 border border-transparent'
                   }`}
-                style={{ fontFamily: 'Rajdhani, sans-serif' }}
               >
-                <AlertTriangle className="w-5 h-5" />
+                <AlertTriangle className="w-4 h-4" />
                 <span>Findings</span>
               </Link>
               <Link
                 to="/domains"
-                className={`flex items-center space-x-2 px-5 py-2 rounded-sm transition-all duration-300 uppercase tracking-wider text-sm border ${isActive('/domains')
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 border-cyan-400 text-black font-bold shadow-[0_0_20px_rgba(0,255,159,0.5)]'
-                  : 'border-blue-500/30 text-cyan-300 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,255,159,0.3)] hover-cyber'
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium ${isActive('/domains')
+                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5 border border-transparent'
                   }`}
-                style={{ fontFamily: 'Rajdhani, sans-serif' }}
               >
-                <Globe className="w-5 h-5" />
+                <Globe className="w-4 h-4" />
                 <span>Domains</span>
               </Link>
             </nav>

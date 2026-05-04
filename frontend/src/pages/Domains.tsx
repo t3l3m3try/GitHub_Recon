@@ -117,7 +117,7 @@ export default function Domains() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-xl neon-text cyber-pulse">LOADING DOMAINS...</div>
+        <div className="text-lg text-gray-400 animate-subtle-pulse">Loading domains...</div>
       </div>
     );
   }
@@ -126,8 +126,8 @@ export default function Domains() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-4xl font-bold mb-2 neon-text uppercase tracking-wider" style={{ fontFamily: 'Orbitron, monospace' }}>Domains</h2>
-          <p className="text-cyan-400" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Manage domains to monitor for security findings</p>
+          <h2 className="text-3xl font-bold mb-1 page-title" >Domains</h2>
+          <p className="text-gray-400 text-sm" >Manage domains to monitor for security findings</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -145,36 +145,36 @@ export default function Domains() {
           const latestScan = getLatestScan(domain.id);
 
           return (
-            <div key={domain.id} className={`card ${scanning ? 'neon-box-blue' : 'neon-box'} hover:scale-105 transition-transform`}>
+            <div key={domain.id} className={`card hover:scale-[1.02] transition-all`} style={{ borderColor: scanning ? 'rgba(59,130,246,0.2)' : undefined }}>
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-2xl font-bold text-cyan-300" style={{ fontFamily: 'Orbitron, monospace', textShadow: '0 0 10px var(--cyber-cyan)' }}>{domain.name}</h3>
+                    <h3 className="text-xl font-bold text-white">{domain.name}</h3>
                     {scanning ? (
-                      <Loader2 className="w-6 h-6 text-blue-400 animate-spin" style={{ filter: 'drop-shadow(0 0 8px var(--cyber-blue))' }} />
+                      <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                     ) : domain.active ? (
-                      <CheckCircle className="w-6 h-6 text-cyan-400 cyber-pulse" style={{ filter: 'drop-shadow(0 0 8px var(--cyber-cyan))' }} />
+                      <CheckCircle className="w-5 h-5 text-emerald-400" />
                     ) : (
-                      <Clock className="w-6 h-6 text-blue-500" />
+                      <Clock className="w-5 h-5 text-gray-500" />
                     )}
                   </div>
-                  <div className="text-sm text-cyan-400/70 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider" >
                     Scan Frequency: {domain.scanFrequency}
                   </div>
                 </div>
 
                 {/* Scan Progress */}
                 {scanning && latestScan && (
-                  <div className="bg-blue-900/20 border border-blue-500/30 rounded-sm p-3 space-y-2">
+                  <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                        <span className="text-blue-300 text-sm font-bold uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+                        <span className="text-blue-300 text-sm font-bold uppercase tracking-wider" >
                           {latestScan.status === 'QUEUED' ? 'Queued' : latestScan.progress ? getPhaseLabel(latestScan.progress.phase) : 'Scanning'}
                         </span>
                       </div>
                       {latestScan.progress && (
-                        <span className="text-blue-200 text-sm font-bold" style={{ fontFamily: 'Orbitron, monospace', textShadow: '0 0 8px rgba(96, 165, 250, 0.8)' }}>
+                        <span className="text-blue-400 text-sm font-bold" style={{ textShadow: 'none' }}>
                           {latestScan.progress.percent}%
                         </span>
                       )}
@@ -193,18 +193,18 @@ export default function Domains() {
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <p className="text-blue-400/70 text-xs truncate flex-1" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                          <p className="text-blue-400/70 text-xs truncate flex-1" >
                             {latestScan.progress.message}
                           </p>
                           {latestScan.progress.findings > 0 && (
-                            <span className="text-cyan-400 text-xs ml-2 whitespace-nowrap" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                            <span className="text-gray-400 text-xs ml-2 whitespace-nowrap" >
                               {latestScan.progress.findings} found
                             </span>
                           )}
                         </div>
                       </>
                     ) : (
-                      <p className="text-blue-400/70 text-xs" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                      <p className="text-blue-400/70 text-xs" >
                         {latestScan.status === 'QUEUED' ? 'Queued, starting soon...' : 'Initializing...'}
                       </p>
                     )}
@@ -213,41 +213,41 @@ export default function Domains() {
 
                 {/* Latest scan result */}
                 {!scanning && latestScan && latestScan.status === 'COMPLETED' && (
-                  <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-sm p-3">
-                    <div className="text-cyan-400/70 text-xs uppercase tracking-wider mb-1" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Last Scan Result</div>
-                    <div className="flex items-center space-x-3 text-sm" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
-                      <span className="text-cyan-300">{latestScan.totalFindings} findings</span>
+                  <div className="bg-white/[0.03] border border-gray-700/50 rounded-sm p-3">
+                    <div className="text-gray-400 text-xs uppercase tracking-wider mb-1" >Last Scan Result</div>
+                    <div className="flex items-center space-x-3 text-sm" >
+                      <span className="text-gray-200">{latestScan.totalFindings} findings</span>
                       {latestScan.criticalCount > 0 && (
-                        <span className="text-purple-400 font-bold">{latestScan.criticalCount} critical</span>
+                        <span className="text-red-400 font-bold">{latestScan.criticalCount} critical</span>
                       )}
                     </div>
                   </div>
                 )}
 
                 {!scanning && latestScan && latestScan.status === 'FAILED' && (
-                  <div className="bg-purple-900/10 border border-purple-500/30 rounded-sm p-3">
-                    <div className="text-purple-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-3">
+                    <div className="text-red-400 text-xs uppercase tracking-wider" >
                       Last scan failed
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between border-b border-cyan-500/20 pb-2">
-                    <span className="text-cyan-400/70 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Total Scans:</span>
-                    <span className="font-bold text-cyan-300" style={{ fontFamily: 'Orbitron, monospace' }}>{domain._count?.scans || 0}</span>
+                  <div className="flex justify-between border-b border-gray-700/50 pb-2">
+                    <span className="text-gray-400 uppercase tracking-wider" >Total Scans:</span>
+                    <span className="font-bold text-gray-200" >{domain._count?.scans || 0}</span>
                   </div>
                   {domain.lastScanAt && (
                     <div className="flex justify-between">
-                      <span className="text-cyan-400/70 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Last Scan:</span>
-                      <span className="font-medium text-cyan-300" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                      <span className="text-gray-400 uppercase tracking-wider" >Last Scan:</span>
+                      <span className="font-medium text-gray-200" >
                         {new Date(domain.lastScanAt).toLocaleDateString()}
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex space-x-2 pt-4 border-t border-cyan-500/30 cyber-border-top">
+                <div className="flex space-x-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   {scanning ? (
                     <button
                       onClick={() => latestScan && handleStopScan(latestScan.id)}
@@ -290,8 +290,8 @@ export default function Domains() {
         })}
 
         {domains?.length === 0 && (
-          <div className="col-span-full card neon-box text-center py-12">
-            <p className="text-cyan-400 mb-4 text-lg uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>No domains added yet</p>
+          <div className="col-span-full card card text-center py-12">
+            <p className="text-gray-400 mb-4 text-lg uppercase tracking-wider" >No domains added yet</p>
             <button
               onClick={() => setShowAddModal(true)}
               className="btn btn-primary inline-flex items-center space-x-2"
@@ -311,13 +311,13 @@ export default function Domains() {
           style={{ backdropFilter: 'blur(8px)' }}
         >
           <div
-            className="card neon-box-blue max-w-md w-full"
+            className="card card max-w-md w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-2xl font-bold mb-4 neon-text uppercase tracking-wider" style={{ fontFamily: 'Orbitron, monospace' }}>Add New Domain</h3>
+            <h3 className="text-xl font-bold mb-4 page-title" >Add New Domain</h3>
             <form onSubmit={handleAddDomain} className="space-y-4">
               <div>
-                <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+                <label className="block text-sm text-gray-400 mb-2 uppercase tracking-wider" >
                   Domain Name *
                 </label>
                 <input
@@ -330,13 +330,13 @@ export default function Domains() {
                   }
                   required
                 />
-                <p className="text-xs text-cyan-400/60 mt-1" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                <p className="text-xs text-gray-500 mt-1" >
                   Enter the domain you want to monitor (e.g., company.com)
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+                <label className="block text-sm text-gray-400 mb-2 uppercase tracking-wider" >
                   Scan Frequency
                 </label>
                 <select
@@ -371,7 +371,7 @@ export default function Domains() {
               </div>
 
               {createMutation.isError && (
-                <div className="text-purple-400 text-sm mt-2 border border-purple-500/50 rounded p-2 bg-purple-900/20" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                <div className="text-red-400 text-sm mt-2 border border-purple-500/50 rounded p-2 bg-red-500/5" >
                   {(createMutation.error as any)?.response?.data?.error || 'Failed to add domain. Please check the format and try again.'}
                 </div>
               )}

@@ -9,7 +9,7 @@ const CRITICALITY_BADGE_STYLES: Record<string, React.CSSProperties> = {
   CRITICAL: { backgroundColor: 'rgba(239,68,68,0.2)', color: '#fca5a5', borderColor: 'rgba(239,68,68,0.6)' },
   HIGH: { backgroundColor: 'rgba(249,115,22,0.2)', color: '#fdba74', borderColor: 'rgba(249,115,22,0.6)' },
   MEDIUM: { backgroundColor: 'rgba(234,179,8,0.2)', color: '#fde047', borderColor: 'rgba(234,179,8,0.6)' },
-  LOW: { backgroundColor: 'rgba(6,182,212,0.2)', color: '#67e8f9', borderColor: 'rgba(6,182,212,0.6)' },
+  LOW: { backgroundColor: 'rgba(6,182,212,0.2)', color: '#93C5FD', borderColor: 'rgba(6,182,212,0.6)' },
   INFO: { backgroundColor: 'rgba(55,65,81,0.3)', color: '#d1d5db', borderColor: 'rgba(107,114,128,0.3)' },
 };
 
@@ -259,7 +259,7 @@ export default function Findings() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-xl neon-text cyber-pulse">LOADING FINDINGS...</div>
+        <div className="text-lg text-gray-400 animate-subtle-pulse">Loading findings...</div>
       </div>
     );
   }
@@ -267,34 +267,34 @@ export default function Findings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-4xl font-bold mb-2 neon-text uppercase tracking-wider" style={{ fontFamily: 'Orbitron, monospace' }}>Findings</h2>
-        <p className="text-cyan-400" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Discovered security findings from GitHub scans</p>
+        <h2 className="text-3xl font-bold mb-1 page-title">Findings</h2>
+        <p className="text-gray-400 text-sm">Discovered security findings from GitHub scans</p>
       </div>
 
       {/* Filters */}
-      <div className="card neon-box-blue">
+      <div className="card" style={{ borderColor: 'rgba(59,130,246,0.15)' }}>
         {/* Active URL-driven filter chips */}
         {(activeRepository || activeScanId || filters.search) && (
           <div className="flex flex-wrap gap-2 mb-4">
-            <span className="flex items-center text-cyan-400/60 text-xs uppercase tracking-wider mr-1" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
+            <span className="flex items-center text-gray-500 text-xs uppercase tracking-wider mr-1">
               <Filter className="w-3 h-3 mr-1" /> Active filters:
             </span>
             {activeRepository && (
-              <span className="flex items-center gap-1 px-2 py-1 bg-cyan-900/30 border border-cyan-500/50 rounded-sm text-xs text-cyan-300" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+              <span className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 font-mono" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
                 📂 {activeRepository.length > 35 ? `...${activeRepository.slice(-32)}` : activeRepository}
-                <button onClick={() => clearUrlFilter('repository')} className="ml-1 text-cyan-400 hover:text-white transition-colors">×</button>
+                <button onClick={() => clearUrlFilter('repository')} className="ml-1 text-gray-400 hover:text-white transition-colors">×</button>
               </span>
             )}
             {activeScanId && (
-              <span className="flex items-center gap-1 px-2 py-1 bg-blue-900/30 border border-blue-500/50 rounded-sm text-xs text-blue-300" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+              <span className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 font-mono" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
                 🔍 Scan filter
-                <button onClick={() => clearUrlFilter('scanId')} className="ml-1 text-blue-400 hover:text-white transition-colors">×</button>
+                <button onClick={() => clearUrlFilter('scanId')} className="ml-1 text-gray-400 hover:text-white transition-colors">×</button>
               </span>
             )}
             {filters.search && (
-              <span className="flex items-center gap-1 px-2 py-1 bg-purple-900/30 border border-purple-500/50 rounded-sm text-xs text-purple-300" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+              <span className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 font-mono" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)' }}>
                 🔎 "{filters.search.length > 30 ? filters.search.substring(0, 30) + '…' : filters.search}"
-                <button onClick={() => { clearUrlFilter('search'); setFilters(f => ({ ...f, search: '' })); setSearchInput(''); }} className="ml-1 text-purple-400 hover:text-white transition-colors">×</button>
+                <button onClick={() => { clearUrlFilter('search'); setFilters(f => ({ ...f, search: '' })); setSearchInput(''); }} className="ml-1 text-gray-400 hover:text-white transition-colors">×</button>
               </span>
             )}
           </div>
@@ -302,7 +302,7 @@ export default function Findings() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
           <div>
-            <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Criticality</label>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Criticality</label>
             <select
               className="input"
               value={filters.criticality}
@@ -326,7 +326,7 @@ export default function Findings() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Type</label>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Type</label>
             <select
               className="input"
               value={filters.type}
@@ -398,7 +398,7 @@ export default function Findings() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Domain</label>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Domain</label>
             <select
               className="input"
               value={filters.domain}
@@ -411,7 +411,7 @@ export default function Findings() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Status</label>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Status</label>
             <select
               className="input"
               value={filters.status}
@@ -424,7 +424,7 @@ export default function Findings() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-cyan-400 mb-2 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Search</label>
+            <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Search</label>
             <div className="flex space-x-2">
               <input
                 type="text"
@@ -447,16 +447,16 @@ export default function Findings() {
       </div>
 
       {/* Findings List */}
-      <div className="card neon-box">
+      <div className="card">
         {/* Results count & Export buttons */}
         {data && (
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-cyan-500/20">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-700">
             <div>
-              <span className="text-sm text-cyan-400 uppercase tracking-wider block sm:inline" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
-                <span className="text-lg font-bold neon-text" style={{ fontFamily: 'Orbitron, monospace' }}>{data.pagination.total}</span> {data.pagination.total === 1 ? 'result' : 'results'} found
+              <span className="text-sm text-gray-400 block sm:inline">
+                <span className="text-base font-bold text-white">{data.pagination.total}</span> {data.pagination.total === 1 ? 'result' : 'results'} found
               </span>
               {data.pagination.pages > 1 && (
-                <span className="text-xs text-cyan-400/50 sm:ml-4 block sm:inline" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                <span className="text-xs text-gray-500 sm:ml-4 block sm:inline font-mono">
                   Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, data.pagination.total)} of {data.pagination.total}
                 </span>
               )}
@@ -466,11 +466,11 @@ export default function Findings() {
               <button
                 onClick={() => exportData('csv')}
                 disabled={exporting !== null || data.pagination.total === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-900/20 border border-cyan-500/40 rounded-sm hover:bg-cyan-900/40 hover:border-cyan-400 text-xs text-cyan-300 transition-colors uppercase tracking-wider font-bold shadow-[0_0_10px_rgba(0,184,255,0.1)] hover:shadow-[0_0_15px_rgba(0,184,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ fontFamily: 'Rajdhani, sans-serif' }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-300 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}
               >
                 {exporting === 'csv' ? (
-                  <span className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Download className="w-3.5 h-3.5" />
                 )}
@@ -479,11 +479,11 @@ export default function Findings() {
               <button
                 onClick={() => exportData('json')}
                 disabled={exporting !== null || data.pagination.total === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/20 border border-purple-500/40 rounded-sm hover:bg-purple-900/40 hover:border-purple-400 text-xs text-purple-300 transition-colors uppercase tracking-wider font-bold shadow-[0_0_10px_rgba(189,0,255,0.1)] hover:shadow-[0_0_15px_rgba(189,0,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ fontFamily: 'Rajdhani, sans-serif' }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-300 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)' }}
               >
                 {exporting === 'json' ? (
-                  <span className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Download className="w-3.5 h-3.5" />
                 )}
@@ -509,25 +509,25 @@ export default function Findings() {
                       <span className="text-2xl">{getCriticalityIcon(finding.criticality)}</span>
                       <span
                         className="px-3 py-1 rounded-sm text-xs font-bold uppercase tracking-wider"
-                        style={{ fontFamily: 'Rajdhani, sans-serif', border: '1px solid', ...badgeStyle }}
+                        style={{ border: '1px solid', ...badgeStyle }}
                       >
                         {finding.criticality}
                       </span>
                       <span
                         className="px-3 py-1 rounded-sm text-xs uppercase tracking-wider"
-                        style={{ fontFamily: 'Rajdhani, sans-serif', border: '1px solid rgba(6,182,212,0.3)', backgroundColor: 'rgba(22,78,99,0.2)', color: '#67e8f9' }}
+                        style={{ border: '1px solid rgba(59,130,246,0.2)', backgroundColor: 'rgba(30,58,138,0.1)', color: '#93C5FD' }}
                       >
                         {finding.primaryType.replace(/_/g, ' ')}
                       </span>
                       {finding.scan?.domain?.name && (
                         <span
                           className="px-3 py-1 rounded-sm text-xs"
-                          style={{ fontFamily: 'Share Tech Mono, monospace', border: '1px solid rgba(59,130,246,0.3)', backgroundColor: 'rgba(30,58,138,0.2)', color: '#93c5fd' }}
+                          style={{ border: '1px solid rgba(59,130,246,0.3)', backgroundColor: 'rgba(30,58,138,0.2)', color: '#93c5fd' }}
                         >
                           🌐 {finding.scan.domain.name}
                         </span>
                       )}
-                      <span className="text-sm font-bold" style={{ fontFamily: 'Orbitron, monospace', color: '#22d3ee' }}>
+                      <span className="text-sm font-bold" style={{ color: '#60A5FA' }}>
                         Score: {finding.score.toFixed(1)}
                       </span>
                     </div>
@@ -538,13 +538,13 @@ export default function Findings() {
                           href={finding.repositoryUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-cyan-400 hover:text-cyan-300 hover-cyber flex items-center space-x-1 transition-all"
-                          style={{ fontFamily: 'Share Tech Mono, monospace' }}
+                          className="text-blue-400 hover:text-blue-300 hover:text-blue-400 flex items-center space-x-1 transition-all"
+                          
                         >
                           <span dangerouslySetInnerHTML={{ __html: highlightText(finding.repository, filters.search) }} />
                           <ExternalLink className="w-4 h-4" />
                         </a>
-                        <span className="text-cyan-500/50">•</span>
+                        <span className="text-gray-500">•</span>
                         {(() => {
                           // Legacy findings used filePath='issue', newer ones use 'issue-12'. Handle both.
                           const isIssue = finding.filePath?.startsWith('issue-') || (finding.filePath === 'issue' && finding.repositoryUrl?.includes('/issues/'));
@@ -567,8 +567,8 @@ export default function Findings() {
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-cyan-400/70 hover:text-cyan-300 hover-cyber flex items-center gap-1 transition-all"
-                              style={{ fontFamily: 'Share Tech Mono, monospace' }}
+                              className="text-gray-400 hover:text-gray-200 hover:text-blue-400 flex items-center gap-1 transition-all"
+                              
                               title={titleText}
                             >
                               <span dangerouslySetInnerHTML={{ __html: highlightText(displayFile, filters.search) }} />
@@ -590,29 +590,29 @@ export default function Findings() {
                         return (
                           <>
                             {displaySecrets.map((secret) => (
-                              <div key={secret.id} className="mt-4 p-4 rounded-md transition-all" style={{ border: '1px solid rgba(6,182,212,0.2)', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                              <div key={secret.id} className="mt-4 p-4 rounded-md transition-all" style={{ border: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(0,0,0,0.25)' }}>
                                 <div className="flex items-center gap-3 mb-2">
                                   <span
                                     className="px-2 py-0.5 rounded-sm text-xs uppercase tracking-wider font-bold"
                                     style={{ ...CRITICALITY_BADGE_STYLES[secret.criticality] }}
                                   >{secret.criticality}</span>
-                                  <span className="text-cyan-400 font-bold text-xs uppercase">{secret.type.replace(/_/g, ' ')}</span>
+                                  <span className="text-blue-400 font-bold text-xs uppercase">{secret.type.replace(/_/g, ' ')}</span>
                                 </div>
 
-                                <div className="mb-3 p-3 rounded-sm font-mono text-sm" style={{ border: '1px solid rgba(168,85,247,0.3)', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                                  <div className="text-xs mb-1 uppercase tracking-wider font-bold" style={{ fontFamily: 'Rajdhani, sans-serif', color: '#a78bfa' }}>🔐 Secret Match:</div>
+                                <div className="mb-3 p-3 rounded-sm font-mono text-sm" style={{ border: '1px solid rgba(139,92,246,0.15)', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                                  <div className="text-xs mb-1 uppercase tracking-wider font-bold" style={{ color: '#A78BFA' }}>🔐 Secret Match:</div>
                                   <div
                                     className="break-all select-all"
-                                    style={{ fontFamily: 'Share Tech Mono, monospace', color: '#c4b5fd' }}
+                                    style={{ color: '#C4B5FD' }}
                                     dangerouslySetInnerHTML={{ __html: highlightText(secret.content, filters.search) }}
                                   />
                                 </div>
 
                                 <div className="p-3 rounded-sm font-mono text-sm max-h-64 overflow-y-auto" style={{ border: '1px solid rgba(6,182,212,0.2)', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                                  <div className="text-xs mb-1 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(34,211,238,0.6)' }}>📄 Context:</div>
+                                  <div className="text-xs mb-1 uppercase tracking-wider" style={{ color: 'rgba(156,163,175,0.5)' }}>📄 Context:</div>
                                   <pre
                                     className="text-xs whitespace-pre-wrap break-all"
-                                    style={{ fontFamily: 'Share Tech Mono, monospace', color: '#67e8f9' }}
+                                    style={{ color: '#93C5FD' }}
                                     dangerouslySetInnerHTML={{ __html: highlightText(secret.context, filters.search) }}
                                   />
                                 </div>
@@ -623,8 +623,8 @@ export default function Findings() {
                               <div className="mt-2 text-center">
                                 <button
                                   onClick={() => toggleExpand(finding.id)}
-                                  className="mx-auto flex items-center gap-2 px-6 py-2 bg-cyan-900/10 hover:bg-cyan-900/30 border border-cyan-500/20 hover:border-cyan-500/50 rounded-full text-xs text-cyan-400 font-bold uppercase tracking-widest transition-all"
-                                  style={{ fontFamily: 'Rajdhani, sans-serif' }}
+                                  className="mx-auto flex items-center gap-2 px-6 py-2 bg-cyan-900/10 hover:bg-cyan-900/30 border border-gray-700 hover:border-cyan-500/50 rounded-full text-xs text-blue-400 font-bold uppercase tracking-widest transition-all"
+                                  
                                 >
                                   {isExpanded ? (
                                     <>
@@ -648,8 +648,8 @@ export default function Findings() {
                             href={finding.fileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-cyan-400 hover:text-cyan-300 hover-cyber flex items-center space-x-1 transition-all"
-                            style={{ fontFamily: 'Rajdhani, sans-serif' }}
+                            className="text-blue-400 hover:text-blue-300 hover:text-blue-400 flex items-center space-x-1 transition-all"
+                            
                           >
                             <span>View File</span>
                             <ExternalLink className="w-4 h-4" />
@@ -660,8 +660,8 @@ export default function Findings() {
                             href={finding.commitUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-cyan-400 hover:text-cyan-300 hover-cyber flex items-center space-x-1 transition-all"
-                            style={{ fontFamily: 'Rajdhani, sans-serif' }}
+                            className="text-blue-400 hover:text-blue-300 hover:text-blue-400 flex items-center space-x-1 transition-all"
+                            
                           >
                             <span>View Commit</span>
                             <ExternalLink className="w-4 h-4" />
@@ -669,20 +669,20 @@ export default function Findings() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs flex-wrap" style={{ fontFamily: 'Share Tech Mono, monospace' }}>
+                      <div className="flex items-center gap-4 text-xs flex-wrap" >
                         {finding.commitDate ? (
-                          <span className="flex items-center gap-1 text-cyan-300/80" title="Date of the last commit that modified this file on GitHub">
-                            <span className="text-cyan-500/50 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>File modified:</span>
+                          <span className="flex items-center gap-1 text-gray-300" title="Date of the last commit that modified this file on GitHub">
+                            <span className="text-gray-500 uppercase tracking-wider" >File modified:</span>
                             <span className="font-bold">📅 {new Date(finding.commitDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-cyan-400/40 italic" title="File modification date not yet available — will be fetched on next scan">
-                            <span className="text-cyan-500/30 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>File modified:</span>
+                          <span className="flex items-center gap-1 text-gray-500 italic" title="File modification date not yet available — will be fetched on next scan">
+                            <span className="text-gray-600 uppercase tracking-wider" >File modified:</span>
                             <span>N/A</span>
                           </span>
                         )}
-                        <span className="flex items-center gap-1 text-cyan-400/50" title="Date when this finding was detected by the scanner">
-                          <span className="text-cyan-500/30 uppercase tracking-wider" style={{ fontFamily: 'Rajdhani, sans-serif' }}>Detected:</span>
+                        <span className="flex items-center gap-1 text-gray-500" title="Date when this finding was detected by the scanner">
+                          <span className="text-gray-600 uppercase tracking-wider" >Detected:</span>
                           <span>{new Date(finding.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                         </span>
                       </div>
@@ -694,8 +694,8 @@ export default function Findings() {
                       onClick={() => handleMarkVerified(finding)}
                       className="px-3 py-2 rounded-sm text-xs uppercase tracking-wider font-bold flex items-center space-x-1 transition-all"
                       style={finding.verified
-                        ? { fontFamily: 'Rajdhani, sans-serif', color: '#67e8f9', border: '1px solid rgba(6,182,212,0.5)', background: 'linear-gradient(to right, rgba(6,182,212,0.3), rgba(34,197,94,0.3))', boxShadow: '0 0 10px rgba(0,255,159,0.3)' }
-                        : { fontFamily: 'Rajdhani, sans-serif', color: '#22d3ee', border: '1px solid rgba(6,182,212,0.3)', backgroundColor: 'rgba(22,78,99,0.2)' }
+                        ? { color: '#93C5FD', border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.12)' }
+                        : { color: '#60A5FA', border: '1px solid rgba(59,130,246,0.2)', backgroundColor: 'rgba(30,58,138,0.1)' }
                       }
                     >
                       <Check className="w-4 h-4" />
@@ -706,8 +706,8 @@ export default function Findings() {
                       onClick={() => handleMarkFalsePositive(finding)}
                       className="px-3 py-2 rounded-sm text-xs uppercase tracking-wider font-bold flex items-center space-x-1 transition-all"
                       style={finding.falsePositive
-                        ? { fontFamily: 'Rajdhani, sans-serif', color: '#c4b5fd', border: '1px solid rgba(168,85,247,0.5)', background: 'linear-gradient(to right, rgba(168,85,247,0.3), rgba(217,70,239,0.3))', boxShadow: '0 0 10px rgba(189,0,255,0.3)' }
-                        : { fontFamily: 'Rajdhani, sans-serif', color: '#a78bfa', border: '1px solid rgba(168,85,247,0.3)', backgroundColor: 'rgba(88,28,135,0.2)' }
+                        ? { color: '#C4B5FD', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.12)' }
+                        : { color: '#A78BFA', border: '1px solid rgba(239,68,68,0.2)', backgroundColor: 'rgba(127,29,29,0.08)' }
                       }
                     >
                       <X className="w-4 h-4" />
