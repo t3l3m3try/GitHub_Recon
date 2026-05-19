@@ -2,6 +2,9 @@
 
 A Cyber Threat Intelligence (CTI) platform for detecting sensitive information and security vulnerabilities in public GitHub repositories. GitHub Recon helps organizations monitor their domains, email addresses, API keys, credentials, and other sensitive data that may have been accidentally exposed.
 
+<img width="1372" height="911" alt="1" src="https://github.com/user-attachments/assets/233b0aa3-172f-48f5-a894-1fbd1a3ace30" />
+
+
 ## 🚀 Key Features
 
 - **Comprehensive Scanning**: Monitors repositories, commits, issues, and gists for exposed data.
