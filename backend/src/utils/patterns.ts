@@ -146,7 +146,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     type: 'GENERIC_SECRET',
     pattern: /(secret|password|passwd|pwd|token|api[_-]?key|auth[_-]?key)['\"\s]*[:=]['\"\s]*([^\s'\"<>]{8,})/gi,
     description: 'Generic Secret Pattern',
-    entropyThreshold: 3.0,
+    entropyThreshold: 3.8,
     contextKeywords: ['secret', 'password', 'token', 'key'],
     exampleMatch: 'api_key: supersecretvalue123'
   },
