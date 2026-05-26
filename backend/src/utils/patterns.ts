@@ -483,7 +483,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // --- NEW PATTERNS FROM DEEP ANALYSIS (14 tools + 3 dork files) ---
 
-  // GitHub Fine-Grained Personal Access Token (new format, TruffleHog/SecretScanner)
+  // GitHub Fine-Grained Personal Access Token (new format, SecretScanner)
   {
     type: 'GITHUB_TOKEN',
     pattern: /(?<![A-Za-z0-9])github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}(?![A-Za-z0-9])/g,
@@ -493,7 +493,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'github_pat_11ABCDE...'
   },
 
-  // Facebook Access Token (SecretFinder/shhgit/TruffleHog/Keyleaksecret)
+  // Facebook Access Token (SecretFinder/shhgit/Keyleaksecret)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])EAACEdEose0cBA[0-9A-Za-z]+(?![A-Za-z0-9])/g,
@@ -503,7 +503,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'EAACEdEose0cBAABCDEF...'
   },
 
-  // Google OAuth Access Token (SecretFinder/shhgit/detect-secrets/TruffleHog)
+  // Google OAuth Access Token (SecretFinder/shhgit/detect-secrets)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])ya29\.[0-9A-Za-z\-_]+(?![A-Za-z0-9])/g,
@@ -533,7 +533,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: '6LdA123456789abcdefghijklmnopqrstuvwxyz'
   },
 
-  // Firebase Cloud Messaging Server Key (TruffleHog/SecretScanner)
+  // Firebase Cloud Messaging Server Key (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}(?![A-Za-z0-9])/g,
@@ -553,7 +553,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'amzn.mws.12345678-1234-1234-1234-123456789012'
   },
 
-  // Mailgun API Key (SecretFinder/shhgit/TruffleHog/detect-secrets)
+  // Mailgun API Key (SecretFinder/shhgit/detect-secrets)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])key-[0-9a-zA-Z]{32}(?![A-Za-z0-9])/g,
@@ -563,7 +563,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'key-1234567890abcdef1234567890abcdef'
   },
 
-  // Twilio Account SID (SecretFinder/SecretScanner/TruffleHog)
+  // Twilio Account SID (SecretFinder/SecretScanner)
   {
     type: 'TWILIO_KEY',
     pattern: /(?<![A-Za-z0-9])AC[a-zA-Z0-9_\-]{32}(?![A-Za-z0-9])/g,
@@ -583,7 +583,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'AP1234567890abcdef1234567890abcdef'
   },
 
-  // PyPI API Token (detect-secrets/TruffleHog/Keyleaksecret)
+  // PyPI API Token (detect-secrets/Keyleaksecret)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])pypi-[A-Za-z0-9_-]{50,}(?![A-Za-z0-9])/g,
@@ -593,7 +593,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'pypi-AgEIcHlwaS5vcmc...'
   },
 
-  // HashiCorp Vault Token (TruffleHog/SecretScanner/Keyleaksecret)
+  // HashiCorp Vault Token (SecretScanner/Keyleaksecret)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])hvs\.[a-zA-Z0-9_-]{24,}(?![A-Za-z0-9])/g,
@@ -603,7 +603,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'hvs.CAESIJM...'
   },
 
-  // HashiCorp Vault Batch Token (TruffleHog)
+  // HashiCorp Vault Batch Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])hvb\.[a-zA-Z0-9_-]{24,}(?![A-Za-z0-9])/g,
@@ -613,7 +613,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'hvb.AAAAAQabc...'
   },
 
-  // Stripe Restricted API Key (SecretFinder/shhgit/TruffleHog)
+  // Stripe Restricted API Key (SecretFinder/shhgit)
   {
     type: 'STRIPE_KEY',
     pattern: /(?<![A-Za-z0-9])rk_live_[0-9a-zA-Z]{24,}(?![A-Za-z0-9])/g,
@@ -623,7 +623,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'rk_live_abcdefghijklmnopqrstuvwx'
   },
 
-  // Stripe Test Secret Key (TruffleHog/Keyleaksecret — indicates test env)
+  // Stripe Test Secret Key (Keyleaksecret — indicates test env)
   {
     type: 'STRIPE_KEY',
     pattern: /(?<![A-Za-z0-9])sk_test_[0-9a-zA-Z]{24,}(?![A-Za-z0-9])/g,
@@ -633,7 +633,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'sk_test_abcdefghijklmnopqrstuvwx'
   },
 
-  // Stripe Webhook Signing Secret (TruffleHog)
+  // Stripe Webhook Signing Secret
   {
     type: 'STRIPE_KEY',
     pattern: /(?<![A-Za-z0-9])whsec_[0-9a-zA-Z]{32,}(?![A-Za-z0-9])/g,
@@ -673,7 +673,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'AccountKey=abc123...=='
   },
 
-  // Grafana Service Account Token (TruffleHog)
+  // Grafana Service Account Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])glsa_[a-zA-Z0-9_+\/=-]{32,}(?![A-Za-z0-9])/g,
@@ -683,7 +683,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'glsa_abc123...'
   },
 
-  // Grafana Cloud API Token (TruffleHog)
+  // Grafana Cloud API Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])glc_[a-zA-Z0-9_+\/=-]{32,}(?![A-Za-z0-9])/g,
@@ -703,7 +703,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'PMAK-1234567890abcdef12345678-1234567890abcdef1234567890abcdef12'
   },
 
-  // Doppler Token (TruffleHog/SecretScanner)
+  // Doppler Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])dp\.(?:pt|st)\.[a-zA-Z0-9_-]{43,}(?![A-Za-z0-9])/g,
@@ -713,7 +713,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'dp.pt.abc123...'
   },
 
-  // Linear API Key (TruffleHog/SecretScanner)
+  // Linear API Key (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])lin_api_[a-zA-Z0-9]{40}(?![A-Za-z0-9])/g,
@@ -723,7 +723,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'lin_api_abc123...'
   },
 
-  // Age Encryption Secret Key (TruffleHog)
+  // Age Encryption Secret Key
   {
     type: 'PRIVATE_KEY',
     pattern: /(?<![A-Za-z0-9])AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}(?![A-Za-z0-9])/g,
@@ -733,7 +733,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'AGE-SECRET-KEY-1QPZRY...'
   },
 
-  // Discord Webhook URL (TruffleHog/SecretScanner)
+  // Discord Webhook URL (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /https:\/\/discord(?:app)?\.com\/api\/webhooks\/[0-9]+\/[a-zA-Z0-9_-]+/g,
@@ -743,7 +743,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'https://discord.com/api/webhooks/123456789/abc...'
   },
 
-  // Sentry Auth Token (TruffleHog/SecretScanner)
+  // Sentry Auth Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])sntrys_[a-zA-Z0-9]{40,}(?![A-Za-z0-9])/g,
@@ -753,7 +753,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'sntrys_abc123...'
   },
 
-  // Sentry DSN (TruffleHog)
+  // Sentry DSN
   {
     type: 'API_KEY',
     pattern: /https:\/\/[a-f0-9]{32}@[a-z0-9]+\.ingest\.sentry\.io\/[0-9]+/g,
@@ -763,7 +763,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'https://abc123@o123.ingest.sentry.io/456'
   },
 
-  // Notion Integration Token (TruffleHog/SecretScanner)
+  // Notion Integration Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])secret_[a-zA-Z0-9]{43}(?![A-Za-z0-9])/g,
@@ -773,7 +773,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'secret_abc123...'
   },
 
-  // Contentful Management Token (TruffleHog/SecretScanner)
+  // Contentful Management Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])CFPAT-[a-zA-Z0-9_-]{43}(?![A-Za-z0-9])/g,
@@ -783,7 +783,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'CFPAT-abc123...'
   },
 
-  // Dynatrace API Token (TruffleHog/SecretScanner)
+  // Dynatrace API Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])dt0c01\.[A-Z0-9]{24}\.[A-Z0-9]{64}(?![A-Za-z0-9])/g,
@@ -793,7 +793,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'dt0c01.ABC123...'
   },
 
-  // Sendinblue/Brevo API Key (TruffleHog)
+  // Sendinblue/Brevo API Key
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])xkeysib-[a-f0-9]{64}-[a-zA-Z0-9]{16}(?![A-Za-z0-9])/g,
@@ -803,7 +803,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'xkeysib-abc123...-XYZ123'
   },
 
-  // Dropbox Access Token (TruffleHog/Keyleaksecret)
+  // Dropbox Access Token (Keyleaksecret)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])sl\.[A-Za-z0-9_-]{100,}(?![A-Za-z0-9])/g,
@@ -813,7 +813,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'sl.abc123...'
   },
 
-  // Fly.io API Token (TruffleHog)
+  // Fly.io API Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])fo1_[a-zA-Z0-9_-]{39}(?![A-Za-z0-9])/g,
@@ -823,7 +823,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'fo1_abc123...'
   },
 
-  // Render API Key (TruffleHog)
+  // Render API Key
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])rnd_[a-zA-Z0-9]{32,}(?![A-Za-z0-9])/g,
@@ -833,7 +833,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'rnd_abc123...'
   },
 
-  // SonarQube/SonarCloud Token (TruffleHog/SecretScanner)
+  // SonarQube/SonarCloud Token (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])sqp_[a-f0-9]{40}(?![A-Za-z0-9])/g,
@@ -843,7 +843,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'sqp_abc123...'
   },
 
-  // NuGet API Key (TruffleHog)
+  // NuGet API Key
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])oy2[a-z0-9]{43}(?![A-Za-z0-9])/g,
@@ -853,7 +853,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'oy2abc123...'
   },
 
-  // RubyGems API Key (TruffleHog)
+  // RubyGems API Key
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])rubygems_[a-f0-9]{48}(?![A-Za-z0-9])/g,
@@ -863,7 +863,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'rubygems_abc123...'
   },
 
-  // Docker Hub Personal Access Token (TruffleHog)
+  // Docker Hub Personal Access Token
   {
     type: 'DOCKER_PASSWORD',
     pattern: /(?<![A-Za-z0-9])dckr_pat_[a-zA-Z0-9_-]+(?![A-Za-z0-9])/g,
@@ -873,7 +873,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'dckr_pat_abc123...'
   },
 
-  // Pulumi Access Token (TruffleHog)
+  // Pulumi Access Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])pul-[a-f0-9]{40}(?![A-Za-z0-9])/g,
@@ -883,7 +883,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'pul-abc123...'
   },
 
-  // Replicate API Token (TruffleHog)
+  // Replicate API Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])r8_[a-zA-Z0-9]{40}(?![A-Za-z0-9])/g,
@@ -893,7 +893,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'r8_abc123...'
   },
 
-  // Figma Personal Access Token (TruffleHog)
+  // Figma Personal Access Token
   {
     type: 'API_KEY',
     pattern: /(?<![A-Za-z0-9])figd_[a-zA-Z0-9_-]{40,}(?![A-Za-z0-9])/g,
@@ -913,7 +913,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'dapiabc123...'
   },
 
-  // Firebase Database URL (TruffleHog/SecretScanner)
+  // Firebase Database URL (SecretScanner)
   {
     type: 'API_KEY',
     pattern: /https:\/\/[a-z0-9-]+\.firebaseio\.com/g,
@@ -923,7 +923,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     exampleMatch: 'https://my-app.firebaseio.com'
   },
 
-  // GitLab extended tokens: Pipeline Trigger, Runner Registration (TruffleHog)
+  // GitLab extended tokens: Pipeline Trigger, Runner Registration
   {
     type: 'GITLAB_TOKEN',
     pattern: /(?<![A-Za-z0-9])(?:glptt-[0-9a-f]{40}|GR1348941[0-9a-zA-Z\-_]{20,})(?![A-Za-z0-9])/g,
