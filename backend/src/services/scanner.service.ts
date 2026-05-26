@@ -34,10 +34,10 @@ interface ExtractedSecret {
 const activeScans = new Map<string, AbortController>();
 
 // Total query counts for percentage calculation
-const CODE_QUERIES_COUNT = 128; // Updated to match actual buildOptimizedQueries count
+const CODE_QUERIES_COUNT = 193; // Updated to match actual buildOptimizedQueries count
 const COMMIT_QUERIES_COUNT = 30;
 const ISSUE_QUERIES_COUNT = 24;
-const TOTAL_STEPS = CODE_QUERIES_COUNT + COMMIT_QUERIES_COUNT + ISSUE_QUERIES_COUNT; // 182
+const TOTAL_STEPS = CODE_QUERIES_COUNT + COMMIT_QUERIES_COUNT + ISSUE_QUERIES_COUNT; // 247
 
 class ScannerService {
   private githubService: GitHubService;
@@ -445,28 +445,18 @@ class ScannerService {
   }
 
   /**
-   * Build optimized, non-overlapping queries for maximum CTI coverage
-   *
-   * GitHub code search parser rules enforced here:
-   *   1. Never mix filename:/extension: qualifiers with plain terms in the same OR group.
-   *      e.g. (filename:foo OR bar) → 422. Fix: two separate queries.
-   *   2. Never put "qualifier plain-term" as a single OR operand inside parens.
-   *      e.g. (extension:json api_key OR …) → 422. Fix: qualifier-group AND term-group.
-   *   3. OR without enclosing parens at query top-level makes domain apply only to the
-   *      first term. Always wrap OR groups in parens when using q().
-   *   4. Keep plain-term OR groups to ≤4 long underscore-compound terms to stay under
-   *      GitHub's internal token-complexity limit.
-   */
-  /**
    * Build optimized queries using the repeated-domain OR format.
    *
    * GitHub REST API /search/code uses a legacy parser that rejects
    * "domain" (A OR B OR C) with 422 for many domains.
-   * The web UI uses a newer parser (Blackbird) that accepts it.
-   *
    * The universally compatible format is:
    *   "domain" A OR "domain" B OR "domain" C
-   * where each OR branch is self-contained with the domain.
+   * 
+   * GitHub Search limits enforced here:
+   *   1. Maximum of 5 OR operators per query. Exceeding this causes a silent failure
+   *      (returns 0 results without a 422 error).
+   *   2. Never mix filename:/extension: qualifiers with plain terms in the same OR group.
+   *   3. Never put "qualifier plain-term" as a single OR operand.
    */
   private buildOptimizedQueries(domain: string): string[] {
     const d = `"${domain}"`;
@@ -488,7 +478,8 @@ class ScannerService {
 
     // GROUP 1: High-value credential patterns
     queries.push(qOr('AKIA', 'ASIA', 'AROA', 'aws_secret', 'AWS_SECRET_ACCESS_KEY'));
-    queries.push(qOr('ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'glpat', 'BITBUCKET_APP_PASSWORD'));
+    queries.push(qOr('ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_'));
+    queries.push(qOr('glpat', 'BITBUCKET_APP_PASSWORD'));
     queries.push(qOr('"BEGIN PRIVATE KEY"', '"BEGIN RSA PRIVATE KEY"', '"BEGIN OPENSSH PRIVATE KEY"', '"BEGIN PGP PRIVATE KEY"'));
 
     // GROUP 2: Cloud & SaaS API keys
@@ -497,11 +488,13 @@ class ScannerService {
     queries.push(qOr('api_key', 'apikey', 'API_KEY', 'api_secret'));
 
     // GROUP 3: Authentication & tokens
-    queries.push(qOr('jwt_secret', 'JWT_SECRET', 'bearer', 'oauth_token', 'access_token', 'refresh_token'));
+    queries.push(qOr('jwt_secret', 'JWT_SECRET', 'bearer'));
+    queries.push(qOr('oauth_token', 'access_token', 'refresh_token'));
     queries.push(qOr('password', 'passwd', 'pwd', 'credentials'));
 
     // GROUP 4: Database credentials
-    queries.push(qOr('postgresql', 'mysql', 'mongodb', 'redis', 'DATABASE_URL', 'connection_string'));
+    queries.push(qOr('postgresql', 'mysql', 'mongodb'));
+    queries.push(qOr('redis', 'DATABASE_URL', 'connection_string'));
 
     // GROUP 5: Communication services
     queries.push(qOr('xoxb', 'xoxp', 'SLACK_WEBHOOK', 'SLACK_TOKEN'));
@@ -509,10 +502,12 @@ class ScannerService {
     queries.push(qOr('twilio', 'TWILIO_AUTH_TOKEN', 'discord', 'slack_webhook'));
 
     // GROUP 6: Payment providers
-    queries.push(qOr('sk_live', 'pk_live', 'stripe', 'paypal', 'braintree', 'sq0', 'SQUARE_ACCESS_TOKEN'));
+    queries.push(qOr('sk_live', 'pk_live', 'stripe', 'paypal'));
+    queries.push(qOr('braintree', 'sq0', 'SQUARE_ACCESS_TOKEN'));
 
     // GROUP 7: DevOps & CI/CD
-    queries.push(qOr('npm_', 'npmrc', 'NPM_TOKEN', '_authToken', 'DOCKER_PASSWORD', 'docker_token'));
+    queries.push(qOr('npm_', 'npmrc', 'NPM_TOKEN'));
+    queries.push(qOr('_authToken', 'DOCKER_PASSWORD', 'docker_token'));
     queries.push(qOr('HEROKU_API_KEY', 'heroku'));
     queries.push(qOr('VERCEL_TOKEN', 'NETLIFY_TOKEN'));
 
@@ -550,7 +545,8 @@ class ScannerService {
     queries.push(qOr('postman api', 'postman collection'));
 
     // GROUP 13: Backup and dump files
-    queries.push(qOr('filename:.sql', 'filename:.dump', 'filename:backup', 'filename:.bak', 'extension:old', 'extension:backup'));
+    queries.push(qOr('filename:.sql', 'filename:.dump', 'filename:backup'));
+    queries.push(qOr('filename:.bak', 'extension:old', 'extension:backup'));
     queries.push(qOr('filename:.git-credentials', 'filename:.gitconfig', 'filename:.github_credentials'));
     queries.push(q('credential.helper'));
 
@@ -745,6 +741,107 @@ class ScannerService {
     // GROUP 64: App/Browser Credential Stores & System configs
     queries.push(qOr('filename:logins.json', 'filename:shadow', 'filename:passwd path:etc', 'filename:sshd_config'));
 
+    // ===================================================================
+    // GROUPS 65–83: betterleaks.toml 100% comprehensive coverage
+    // ===================================================================
+
+    // GROUP 65: AI/ML Service Keys (Extended — betterleaks HIGH priority)
+    queries.push(qOr('gsk_', 'GROQ_API_KEY', 'groq'));
+    queries.push(qOr('xai-', 'XAI_API_KEY'));
+    queries.push(qOr('nvapi-', 'NVIDIA_API_KEY'));
+    queries.push(qOr('sk-or-v1-', 'OPENROUTER_API_KEY', 'openrouter'));
+    queries.push(qOr('MISTRAL_API_KEY', 'mistral api'));
+    queries.push(qOr('DEEPSEEK_API_KEY', 'deepseek api'));
+    queries.push(qOr('CEREBRAS_API_KEY', 'csk-'));
+    queries.push(qOr('STABILITY_API_KEY', 'stability ai'));
+
+    // GROUP 66: Cloud Service Keys (Extended — betterleaks HIGH priority)
+    queries.push(qOr('ABSK', 'bedrock-api-key', 'amazon bedrock'));
+    queries.push(qOr('HRKU-', 'heroku api'));
+
+    // GROUP 67: SaaS Communication & Analytics (betterleaks MEDIUM priority)
+    queries.push(qOr('ATATT3', 'atlassian api_token'));
+    queries.push(qOr('mapbox', 'pk.eyJ', 'MAPBOX_ACCESS_TOKEN'));
+    queries.push(qOr('outlook.office.com/webhook', 'teams webhook'));
+    queries.push(qOr('FLWSECK_TEST', 'FLWPUBK_TEST', 'flutterwave'));
+
+    // GROUP 68: Developer Tools & Analytics (betterleaks MEDIUM priority)
+    queries.push(qOr('posthog', 'phx_', 'phc_', 'POSTHOG_API_KEY'));
+    queries.push(qOr('wandb', 'WANDB_API_KEY', 'weights biases'));
+    queries.push(qOr('sgp_', 'sourcegraph'));
+    queries.push(qOr('elevenlabs', 'ELEVENLABS_API_KEY'));
+
+    // GROUP 69: Finance & AI Platforms (betterleaks MEDIUM priority)
+    queries.push(qOr('plaid', 'PLAID_SECRET', 'PLAID_CLIENT_ID'));
+    queries.push(qOr('cohere', 'CO_API_KEY'));
+
+    // GROUP 70: Vercel Extended Tokens (betterleaks distinctive prefixes)
+    queries.push(qOr('vck_', 'vca_', 'vcr_', 'vci_', 'vcp_'));
+
+    // GROUP 71: Slack Extended Tokens (betterleaks config/legacy)
+    queries.push(qOr('xoxe.xox', 'xoxe-', 'xox[ar]-'));
+
+    // GROUP 72: GitLab Extended Tokens (betterleaks CI/deploy/scim)
+    queries.push(qOr('glcbt-', 'gldt-', 'glffct-'));
+    queries.push(qOr('glft-', 'gloas-', 'glsoat-'));
+
+    // GROUP 73: DevOps & CI/CD Tools
+    queries.push(qOr('CLOJARS_', 'clojars'));
+    queries.push(qOr('duffel_test', 'duffel_live'));
+    queries.push(qOr('EZAK', 'EZTK', 'easypost'));
+    queries.push(qOr('fio-u-', 'frameio'));
+    queries.push(qOr('harness', 'pat.', 'sat.'));
+
+    // GROUP 74: Infrastructure & Cloud
+    queries.push(qOr('ico-', 'infracost'));
+    queries.push(qOr('sha256~', 'openshift'));
+    queries.push(qOr('pnu_', 'prefect'));
+    queries.push(qOr('tk-us-', 'scalingo'));
+
+    // GROUP 75: Shipping & Fintech
+    queries.push(qOr('shippo_live', 'shippo_test'));
+    queries.push(qOr('sm_aat_', 'sm_pat_', 'sm_sat_', 'settlemint'));
+
+    // GROUP 76: Security Scanning & Dev
+    queries.push(qOr('sntryu_', 'sentry user'));
+    queries.push(qOr('snyk_token', 'SNYK_TOKEN'));
+
+    // GROUP 77: SaaS, Comms, and Social Media (Category 2 keywords)
+    queries.push(qOr('asana', 'beamer', 'contentful', 'intercom', 'mattermost'));
+    queries.push(qOr('zendesk', 'facebook', 'eaam', 'eaac', 'flickr'));
+    queries.push(qOr('linkedin', 'webhook.office.com', 'sendbird', 'sendinblue'));
+    queries.push(qOr('telegram', 'twitch', 'twitter'));
+
+    // GROUP 78: Developer Tools & API Gateways (Category 2 keywords)
+    queries.push(qOr('authress', 'scauth_', 'cursor', 'gitea', 'gitter'));
+    queries.push(qOr('greptile', 'launchdarkly', 'linear', 'lin_api_'));
+    queries.push(qOr('readme', 'replicate', 'sonar', 'typeform', 'yandex'));
+
+    // GROUP 79: Cloud, Data & Infrastructure (Category 2 keywords)
+    queries.push(qOr('assemblyai', 'clickhouse', 'confluent', 'databricks', 'deepgram'));
+    queries.push(qOr('digitalocean', 'doo_v1_', 'dop_v1_', 'dor_v1_'));
+    queries.push(qOr('flyio', 'fo1_', 'fm1', 'fm2_'));
+    queries.push(qOr('hashicorp', 'atlasv1', 'planetscale', 'pscale'));
+    queries.push(qOr('rapidapi', 'rubygems', 'sidekiq'));
+
+    // GROUP 80: Finance, E-commerce, Logistics & CI/CD (Category 2 keywords)
+    queries.push(qOr('coinbase', 'bittrex', 'kraken', 'kucoin'));
+    queries.push(qOr('finicity', 'finnhub', 'freshbooks', 'shopify'));
+    queries.push(qOr('droneci', 'endorlabs', 'snyk'));
+
+    // GROUP 81: Misc Services (Category 2 keywords)
+    queries.push(qOr('cisco meraki', 'dropbox', 'etsy', 'hubspot', 'looker'));
+    queries.push(qOr('maxmind', 'notion', 'ntn_', 'nytimes', 'ollama'));
+    queries.push(qOr('privateai', 'squarespace'));
+    
+    // GROUP 82: Misc Utilities
+    queries.push(qOr('curl', 'pkcs12', 'nuget'));
+    
+    // GROUP 83: Remaining Services
+    queries.push(qOr('adafruit', 'adobe', 'p8e-', 'airtable', 'alibaba'));
+    queries.push(qOr('ltai', 'fastly', 'freemius', 'intra42', 's-s4t2'));
+    queries.push(qOr('togetherai', 'tgp_v1_'));
+
     return queries;
   }
 
@@ -846,8 +943,9 @@ class ScannerService {
 
             const secrets = this.extractSecrets(result.message, allPatterns);
 
-            // Also extract emails from commit author/committer metadata
-            const emailRegex = new RegExp(`[a-zA-Z0-9._%+-]+@${domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+            // Also extract emails from commit author/committer metadata (including subdomains)
+            const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const emailRegex = new RegExp(`[a-zA-Z0-9._%+-]+@(?:[a-zA-Z0-9-]+\\.)*${escapedDomain}(?![a-zA-Z0-9.-])`, 'i');
             if (result.authorEmail && emailRegex.test(result.authorEmail)) {
               secrets.push({ type: 'EMAIL', content: result.authorEmail, matchIndex: 0 });
             }
@@ -1154,8 +1252,8 @@ class ScannerService {
     const pairs: ExtractedSecret[] = [];
     const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    // Find all domain emails in content
-    const emailRegex = new RegExp(`[a-zA-Z0-9._%+-]+@${escapedDomain}`, 'gi');
+    // Find all domain emails in content (including subdomains)
+    const emailRegex = new RegExp(`[a-zA-Z0-9._%+-]+@(?:[a-zA-Z0-9-]+\\.)*${escapedDomain}(?![a-zA-Z0-9.-])`, 'gi');
     const emails: { email: string; index: number }[] = [];
     let emailMatch;
     while ((emailMatch = emailRegex.exec(content)) !== null) {
@@ -1180,8 +1278,10 @@ class ScannerService {
     while ((blockMatch = userPassBlockRegex.exec(content)) !== null) {
       const email = blockMatch[1];
       const password = blockMatch[2];
-      // Only care about domain-matching emails
-      if (email.toLowerCase().endsWith(`@${domain.toLowerCase()}`)) {
+      // Only care about domain-matching emails (including subdomains)
+      const lowerEmail = email.toLowerCase();
+      const lowerDomain = domain.toLowerCase();
+      if (lowerEmail.endsWith(`@${lowerDomain}`) || lowerEmail.endsWith(`.${lowerDomain}`)) {
         const pairContent = `${email}:${password}`;
         pairs.push({
           type: 'CREDENTIAL_PAIR',
