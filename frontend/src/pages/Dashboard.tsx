@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { findingsAPI, scanAPI, domainAPI } from '../lib/api';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { AlertTriangle, TrendingUp, Shield, Clock, AlertCircle, X, Globe, ChevronDown } from 'lucide-react';
+import { getMacroCategory } from '../utils/macroCategories';
 
 const CRITICALITY_COLORS = {
   critical: '#EF4444',
@@ -139,9 +140,26 @@ export default function Dashboard() {
 
   const topRepos = stats?.topRepositories?.slice(0, 10) || [];
   const topFiles = stats?.topFiles?.slice(0, 10) || [];
-  const topTypes = stats?.byType
-    ? [...stats.byType].sort((a: any, b: any) => b.count - a.count).slice(0, 10)
-    : [];
+  const topTypes = (() => {
+    if (!stats?.byType) return [];
+    const macroMap: Record<string, { id: string; name: string; icon: string; color: string; count: number; subTypes: string[] }> = {};
+    for (const item of stats.byType) {
+      const category = getMacroCategory(item.type);
+      if (!macroMap[category.id]) {
+        macroMap[category.id] = {
+          id: category.id,
+          name: category.name,
+          icon: category.icon,
+          color: category.color,
+          count: 0,
+          subTypes: []
+        };
+      }
+      macroMap[category.id].count += item.count;
+      macroMap[category.id].subTypes.push(item.type);
+    }
+    return Object.values(macroMap).sort((a, b) => b.count - a.count);
+  })();
 
   // Extract and rank emails by frequency
   const emailRanking = emailFindings?.findings?.reduce((acc: any, finding: any) => {
@@ -445,13 +463,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Top 10 Type Count */}
+        {/* Top Finding Categories */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-200"> Top 10 Finding Types</h3>
-            {stats?.uniqueFindingTypes > 0 && (
+            <h3 className="text-base font-semibold text-gray-200">Finding Categories</h3>
+            {topTypes.length > 0 && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
-                <span className="text-sm font-bold text-blue-400">{stats.uniqueFindingTypes}</span>
+                <span className="text-sm font-bold text-blue-400">{topTypes.length}</span>
                 <span className="text-xs text-gray-400">unique</span>
               </span>
             )}
@@ -463,19 +481,27 @@ export default function Dashboard() {
                 const pct = Math.round((item.count / maxCount) * 100);
                 return (
                   <button
-                    key={item.type}
-                    onClick={() => navigate(`/findings?type=${encodeURIComponent(item.type)}${selectedDomain ? `&domain=${encodeURIComponent(selectedDomain)}` : ''}`)}
-                    title={`View ${item.type.replace(/_/g, ' ')} findings`}
+                    key={item.id}
+                    onClick={() => {
+                      navigate(`/findings?type=MACRO_${item.id}${selectedDomain ? `&domain=${encodeURIComponent(selectedDomain)}` : ''}`);
+                    }}
+                    title={`View all ${item.name} findings`}
                     className="w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left group"
                     style={{ background: 'rgba(17,24,39,0.5)', borderColor: 'rgba(255,255,255,0.06)' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,0.3)'; (e.currentTarget as HTMLElement).style.background = 'rgba(59,130,246,0.05)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.background = 'rgba(17,24,39,0.5)'; }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(139,92,246,0.3)';
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.05)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)';
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(17,24,39,0.5)';
+                    }}
                   >
                     <span className="text-gray-500 font-semibold text-sm w-5 text-right flex-shrink-0">#{index + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-gray-300 text-xs uppercase tracking-wider truncate font-medium">
-                          {item.type.replace(/_/g, ' ')}
+                        <span className="text-gray-300 text-xs uppercase tracking-wider truncate font-semibold">
+                          {item.name}
                         </span>
                         <span className="text-white font-bold text-sm ml-2 flex-shrink-0">
                           {item.count}
@@ -484,11 +510,11 @@ export default function Dashboard() {
                       <div className="w-full rounded-full h-1" style={{ background: 'rgba(255,255,255,0.06)' }}>
                         <div
                           className="h-1 rounded-full transition-all"
-                          style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #3B82F6, #8B5CF6)' }}
+                          style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%)' }}
                         />
                       </div>
                     </div>
-                    <span className="text-blue-400 opacity-0 group-hover:opacity-70 transition-opacity text-xs flex-shrink-0">→</span>
+                    <span className="opacity-0 group-hover:opacity-70 transition-opacity text-xs flex-shrink-0" style={{ color: '#8B5CF6' }}>→</span>
                   </button>
                 );
               })}
@@ -591,7 +617,15 @@ export default function Dashboard() {
                             >
                               {isCritical ? '🔴 CRITICAL' : '🟠 HIGH'}
                             </span>
-                            <span className="px-2 py-0.5 rounded-md text-xs uppercase font-semibold text-violet-400" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/findings?type=${encodeURIComponent(finding.primaryType)}${selectedDomain ? `&domain=${encodeURIComponent(selectedDomain)}` : ''}`);
+                              }}
+                              title={`Filter by ${finding.primaryType ? finding.primaryType.replace(/_/g, ' ') : 'UNKNOWN'}`}
+                              className="px-2 py-0.5 rounded-md text-xs uppercase font-semibold text-violet-400 cursor-pointer hover:bg-violet-500/20 hover:border-violet-500/40 transition-colors"
+                              style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer' }}
+                            >
                               {finding.primaryType ? finding.primaryType.replace(/_/g, ' ') : 'UNKNOWN'}
                             </span>
                             <span className="text-blue-400 text-xs font-bold">

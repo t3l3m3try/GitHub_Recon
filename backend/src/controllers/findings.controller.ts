@@ -1,6 +1,36 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { getMacroCategory } from '../utils/macroCategories';
+import { SECRET_PATTERNS } from '../utils/patterns';
+
+// Cache for mapping macro category IDs to active secret types
+let macroCategoryTypesMap: Record<string, string[]> | null = null;
+
+function getMacroCategoryTypes(categoryId: string): string[] {
+  if (!macroCategoryTypesMap) {
+    macroCategoryTypesMap = {};
+    const allTypes = new Set<string>();
+    
+    // Collect all unique types from SECRET_PATTERNS
+    for (const p of SECRET_PATTERNS) {
+      allTypes.add(p.type);
+    }
+    // Add additional runtime types that are dynamically discovered
+    allTypes.add('EMAIL');
+    allTypes.add('CREDENTIAL_PAIR');
+    
+    // Group them by their macro category
+    for (const type of allTypes) {
+      const cat = getMacroCategory(type);
+      if (!macroCategoryTypesMap[cat.id]) {
+        macroCategoryTypesMap[cat.id] = [];
+      }
+      macroCategoryTypesMap[cat.id].push(type);
+    }
+  }
+  return macroCategoryTypesMap[categoryId] || [];
+}
 
 /**
  * Findings Controller
@@ -42,9 +72,24 @@ export async function getFindings(req: Request, res: Response) {
     }
 
     if (type) {
-      where.secrets = {
-        some: { type: type as string }
-      };
+      const typeStr = type as string;
+      if (typeStr.startsWith('MACRO_')) {
+        const categoryId = typeStr.replace('MACRO_', '');
+        const matchingTypes = getMacroCategoryTypes(categoryId);
+        
+        if (matchingTypes.length > 0) {
+          where.primaryType = { in: matchingTypes };
+        } else {
+          where.primaryType = '__NONE__';
+        }
+      } else {
+        const typeValues = typeStr.split(',');
+        if (typeValues.length > 1) {
+          where.primaryType = { in: typeValues };
+        } else {
+          where.primaryType = typeValues[0];
+        }
+      }
     }
 
     if (repository) {
@@ -347,16 +392,19 @@ export async function getStatistics(req: Request, res: Response) {
         orderBy: { _count: { repository: 'desc' } },
         take: 10
       }),
-      // Get top files by aggregating findings by filePath and summing their secret counts
-      // This has to be done slightly differently because _count doesn't aggregate across multiple findings with the same filePath
-      prisma.finding.findMany({
+      // Get top files by the number of findings they appear in (high-performance SQLite group-by)
+      prisma.finding.groupBy({
+        by: ['filePath'],
         where: baseWhere,
-        select: {
-          filePath: true,
+        _count: {
+          id: true
+        },
+        orderBy: {
           _count: {
-            select: { secrets: true }
+            id: 'desc'
           }
-        }
+        },
+        take: 10
       }),
       // Count unique email addresses (grouped by content where type = EMAIL)
       prisma.secret.groupBy({
@@ -404,18 +452,10 @@ export async function getStatistics(req: Request, res: Response) {
         repository: item.repository,
         count: item._count
       })),
-      topFiles: (() => {
-        const fileMap: Record<string, number> = {};
-        for (const item of topFiles) {
-          if (item.filePath) {
-            fileMap[item.filePath] = (fileMap[item.filePath] || 0) + (item._count?.secrets || 0);
-          }
-        }
-        return Object.entries(fileMap)
-          .map(([filePath, count]) => ({ filePath, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-      })(),
+      topFiles: topFiles.map((item: any) => ({
+        filePath: item.filePath,
+        count: item._count.id
+      })),
       uniqueEmails: uniqueEmailGroups.length,
       uniqueFindingTypes: byType.length,
       uniqueRepositories: uniqueRepositoriesGroups.length,

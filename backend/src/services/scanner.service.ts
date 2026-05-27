@@ -328,8 +328,10 @@ class ScannerService {
         try {
           logger.info(`Query ${queryIndex}/${queries.length}${isEmailQuery ? ' [EMAIL-MULTI-PAGE]' : ''} → ${results.length} results`);
 
+          let resultCount = 0;
           for (const result of results) {
             if (signal.aborted) break;
+            resultCount++;
 
             // Domain substring validation: skip files where the domain only appears
             // as part of a larger word (e.g. "mailexample.com" when scanning "example.com")
@@ -343,8 +345,10 @@ class ScannerService {
 
             const secrets = this.extractSecrets(result.content, allPatterns);
 
-            // Yield event loop to prevent blocking the entire node process during heavy regex computations
-            await new Promise(resolve => setTimeout(resolve, 5));
+            // Yield event loop every 20 files to prevent blocking the entire node process during heavy regex computations
+            if (resultCount % 20 === 0) {
+              await new Promise(resolve => setImmediate(resolve));
+            }
 
             // Also detect credential pairs in code files
             const credentialPairs = this.detectCredentialPairs(result.content, domain);

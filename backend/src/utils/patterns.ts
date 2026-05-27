@@ -537,7 +537,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // Firebase Cloud Messaging Server Key
   {
-    type: 'API_KEY',
+    type: 'FIREBASE_KEY',
     pattern: /(?<![A-Za-z0-9])AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140}(?![A-Za-z0-9])/g,
     description: 'Firebase Cloud Messaging Server Key',
     entropyThreshold: 3.5,
@@ -917,7 +917,7 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 
   // Firebase Database URL
   {
-    type: 'API_KEY',
+    type: 'FIREBASE_KEY',
     pattern: /https:\/\/[a-z0-9-]+\.firebaseio\.com/g,
     description: 'Firebase Realtime Database URL',
     entropyThreshold: 0,

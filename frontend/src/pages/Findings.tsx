@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { findingsAPI, domainAPI, Finding } from '../lib/api';
 import { ExternalLink, Check, X, Search, Filter, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { getMacroCategory, MACRO_CATEGORIES, ALL_KNOWN_TYPES } from '../utils/macroCategories';
 
 // Badge styles per criticality — using inline styles to bypass all Tailwind/Vite caching issues
 const CRITICALITY_BADGE_STYLES: Record<string, React.CSSProperties> = {
@@ -330,319 +331,47 @@ export default function Findings() {
             <select
               className="input"
               value={filters.type}
-              onChange={(e) => { setFilters({ ...filters, type: e.target.value }); setPage(1); }}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFilters({ ...filters, type: val });
+                setPage(1);
+                const newParams = new URLSearchParams(searchParams);
+                if (val) newParams.set('type', val);
+                else newParams.delete('type');
+                setSearchParams(newParams);
+              }}
             >
               <option value="">All Types</option>
-              <optgroup label="Email">
-                <option value="EMAIL">Email</option>
+              <optgroup label="Macro Category Filters (Select All)">
+                {Object.entries(MACRO_CATEGORIES).map(([id, category]) => (
+                  <option key={`macro-${id}`} value={`MACRO_${id}`}>
+                    {category.name} (All)
+                  </option>
+                ))}
               </optgroup>
-              <optgroup label="AWS">
-                <option value="AWS_ACCESS_KEY">AWS Access Key</option>
-                <option value="AWS_SECRET_KEY">AWS Secret Key</option>
-              </optgroup>
-              <optgroup label="Version Control">
-                <option value="GITHUB_TOKEN">GitHub Token</option>
-                <option value="GITLAB_TOKEN">GitLab Token</option>
-                <option value="BITBUCKET_TOKEN">Bitbucket Token</option>
-              </optgroup>
-              <optgroup label="Cloud & APIs">
-                <option value="API_KEY">API Key</option>
-                <option value="GOOGLE_API_KEY">Google API Key</option>
-                <option value="FIREBASE_KEY">Firebase Key</option>
-                <option value="AZURE_KEY">Azure Key</option>
-                <option value="HEROKU_KEY">Heroku Key</option>
-                <option value="CLOUDFLARE_KEY">Cloudflare Key</option>
-              </optgroup>
-              <optgroup label="Credentials">
-                <option value="CREDENTIAL_PAIR">Credential Pair (Email+Pass)</option>
-                <option value="PASSWORD">Password</option>
-                <option value="OAUTH_TOKEN">OAuth Token</option>
-                <option value="BEARER_TOKEN">Bearer Token</option>
-                <option value="JWT_SECRET">JWT Token</option>
-              </optgroup>
-              <optgroup label="Keys & Certificates">
-                <option value="PRIVATE_KEY">Private Key</option>
-                <option value="SSH_KEY">SSH Key</option>
-                <option value="PGP_KEY">PGP Private Key</option>
-              </optgroup>
-              <optgroup label="Payment Systems">
-                <option value="STRIPE_KEY">Stripe Key</option>
-                <option value="SQUARE_KEY">Square Key</option>
-                <option value="PAYPAL_TOKEN">PayPal Token</option>
-              </optgroup>
-              <optgroup label="Communication">
-                <option value="SLACK_TOKEN">Slack Token</option>
-                <option value="SLACK_WEBHOOK">Slack Webhook</option>
-                <option value="SENDGRID_KEY">SendGrid Key</option>
-                <option value="MAILCHIMP_KEY">MailChimp Key</option>
-                <option value="TWILIO_KEY">Twilio Key</option>
-              </optgroup>
-              <optgroup label="E-commerce">
-                <option value="SHOPIFY_KEY">Shopify Key</option>
-              </optgroup>
-              <optgroup label="Database">
-                <option value="DATABASE_URL">Database URL</option>
-                <option value="CONNECTION_STRING">Connection String</option>
-              </optgroup>
-              <optgroup label="Development">
-                <option value="NPMRC_AUTH">NPM Auth Token</option>
-                <option value="NPM_TOKEN">NPM Token</option>
-                <option value="DOCKER_PASSWORD">Docker Password</option>
-              </optgroup>
-              <optgroup label="Monitoring">
-                <option value="DATADOG_KEY">Datadog Key</option>
-              </optgroup>
-              <optgroup label="Other">
-                <option value="GENERIC_SECRET">Generic Secret</option>
-              </optgroup>
-              <optgroup label="Precision Sub-Variants">
-                <option value="1PASSWORD_SECRET_KEY">1Password Secret Key</option>
-                <option value="1PASSWORD_SERVICE_ACCOUNT_TOKEN">1Password Service Account Token</option>
-                <option value="ADAFRUIT_API_KEY">Adafruit Api Key</option>
-                <option value="ADOBE_CLIENT_ID">Adobe Client Id</option>
-                <option value="ADOBE_CLIENT_SECRET">Adobe Client Secret</option>
-                <option value="AGE_SECRET_KEY">Age Secret Key</option>
-                <option value="AIRTABLE_API_KEY">Airtable Api Key</option>
-                <option value="AIRTABLE_PERSONNAL_ACCESS_TOKEN">Airtable Personnal Access Token</option>
-                <option value="ALGOLIA_API_KEY">Algolia Api Key</option>
-                <option value="ALIBABA_ACCESS_KEY_ID">Alibaba Access Key Id</option>
-                <option value="ALIBABA_SECRET_KEY">Alibaba Secret Key</option>
-                <option value="ANTHROPIC_ADMIN_API_KEY">Anthropic Admin Api Key</option>
-                <option value="ANTHROPIC_API_KEY">Anthropic Api Key</option>
-                <option value="ARTIFACTORY_API_KEY">Artifactory Api Key</option>
-                <option value="ARTIFACTORY_REFERENCE_TOKEN">Artifactory Reference Token</option>
-                <option value="ASANA_CLIENT_ID">Asana Client Id</option>
-                <option value="ASANA_CLIENT_SECRET">Asana Client Secret</option>
-                <option value="ASSEMBLYAI_API_KEY">Assemblyai Api Key</option>
-                <option value="ATLASSIAN_API_TOKEN">Atlassian Api Token</option>
-                <option value="AUTHRESS_SERVICE_CLIENT_ACCESS_KEY">Authress Service Client Access Key</option>
-                <option value="AWS_ACCESS_TOKEN">Aws Access Token</option>
-                <option value="AWS_AMAZON_BEDROCK_API_KEY_LONG_LIVED">Aws Amazon Bedrock Api Key Long Lived</option>
-                <option value="AWS_AMAZON_BEDROCK_API_KEY_SHORT_LIVED">Aws Amazon Bedrock Api Key Short Lived</option>
-                <option value="AWS_SECRET_ACCESS_KEY">Aws Secret Access Key</option>
-                <option value="AZURE_AD_CLIENT_SECRET">Azure Ad Client Secret</option>
-                <option value="BEAMER_API_TOKEN">Beamer Api Token</option>
-                <option value="BITBUCKET_CLIENT_ID">Bitbucket Client Id</option>
-                <option value="BITBUCKET_CLIENT_SECRET">Bitbucket Client Secret</option>
-                <option value="BITTREX_ACCESS_KEY">Bittrex Access Key</option>
-                <option value="BITTREX_SECRET_KEY">Bittrex Secret Key</option>
-                <option value="CEREBRAS_API_KEY">Cerebras Api Key</option>
-                <option value="CISCO_MERAKI_API_KEY">Cisco Meraki Api Key</option>
-                <option value="CLICKHOUSE_CLOUD_API_SECRET_KEY">Clickhouse Cloud Api Secret Key</option>
-                <option value="CLOJARS_API_TOKEN">Clojars Api Token</option>
-                <option value="CLOUDFLARE_API_KEY">Cloudflare Api Key</option>
-                <option value="CLOUDFLARE_GLOBAL_API_KEY">Cloudflare Global Api Key</option>
-                <option value="CLOUDFLARE_ORIGIN_CA_KEY">Cloudflare Origin Ca Key</option>
-                <option value="CODECOV_ACCESS_TOKEN">Codecov Access Token</option>
-                <option value="COHERE_API_TOKEN">Cohere Api Token</option>
-                <option value="COINBASE_ACCESS_TOKEN">Coinbase Access Token</option>
-                <option value="CONFLUENT_ACCESS_TOKEN">Confluent Access Token</option>
-                <option value="CONFLUENT_SECRET_KEY">Confluent Secret Key</option>
-                <option value="CONTENTFUL_DELIVERY_API_TOKEN">Contentful Delivery Api Token</option>
-                <option value="CURL_AUTH_HEADER">Curl Auth Header</option>
-                <option value="CURL_AUTH_USER">Curl Auth User</option>
-                <option value="CURSOR_API_KEY">Cursor Api Key</option>
-                <option value="DATABRICKS_API_TOKEN">Databricks Api Token</option>
-                <option value="DATADOG_ACCESS_TOKEN">Datadog Access Token</option>
-                <option value="DEEPGRAM_API_KEY">Deepgram Api Key</option>
-                <option value="DEEPSEEK_API_KEY">Deepseek Api Key</option>
-                <option value="DEFINED_NETWORKING_API_TOKEN">Defined Networking Api Token</option>
-                <option value="DIGITALOCEAN_ACCESS_TOKEN">Digitalocean Access Token</option>
-                <option value="DIGITALOCEAN_PAT">Digitalocean Pat</option>
-                <option value="DIGITALOCEAN_REFRESH_TOKEN">Digitalocean Refresh Token</option>
-                <option value="DISCORD_API_TOKEN">Discord Api Token</option>
-                <option value="DISCORD_CLIENT_ID">Discord Client Id</option>
-                <option value="DISCORD_CLIENT_SECRET">Discord Client Secret</option>
-                <option value="DOPPLER_API_TOKEN">Doppler Api Token</option>
-                <option value="DRONECI_ACCESS_TOKEN">Droneci Access Token</option>
-                <option value="DROPBOX_API_TOKEN">Dropbox Api Token</option>
-                <option value="DROPBOX_LONG_LIVED_API_TOKEN">Dropbox Long Lived Api Token</option>
-                <option value="DROPBOX_SHORT_LIVED_API_TOKEN">Dropbox Short Lived Api Token</option>
-                <option value="DUFFEL_API_TOKEN">Duffel Api Token</option>
-                <option value="DYNATRACE_API_TOKEN">Dynatrace Api Token</option>
-                <option value="EASYPOST_API_TOKEN">Easypost Api Token</option>
-                <option value="EASYPOST_TEST_API_TOKEN">Easypost Test Api Token</option>
-                <option value="ELEVENLABS_API_KEY">Elevenlabs Api Key</option>
-                <option value="ENDORLABS_API_KEY">Endorlabs Api Key</option>
-                <option value="ENDORLABS_API_SECRET">Endorlabs Api Secret</option>
-                <option value="ETSY_ACCESS_TOKEN">Etsy Access Token</option>
-                <option value="FACEBOOK_ACCESS_TOKEN">Facebook Access Token</option>
-                <option value="FACEBOOK_PAGE_ACCESS_TOKEN">Facebook Page Access Token</option>
-                <option value="FACEBOOK_SECRET">Facebook Secret</option>
-                <option value="FASTLY_API_TOKEN">Fastly Api Token</option>
-                <option value="FINICITY_API_TOKEN">Finicity Api Token</option>
-                <option value="FINICITY_CLIENT_SECRET">Finicity Client Secret</option>
-                <option value="FINNHUB_ACCESS_TOKEN">Finnhub Access Token</option>
-                <option value="FLICKR_ACCESS_TOKEN">Flickr Access Token</option>
-                <option value="FLUTTERWAVE_ENCRYPTION_KEY">Flutterwave Encryption Key</option>
-                <option value="FLUTTERWAVE_PUBLIC_KEY">Flutterwave Public Key</option>
-                <option value="FLUTTERWAVE_SECRET_KEY">Flutterwave Secret Key</option>
-                <option value="FLYIO_ACCESS_TOKEN">Flyio Access Token</option>
-                <option value="FRAMEIO_API_TOKEN">Frameio Api Token</option>
-                <option value="FREEMIUS_SECRET_KEY">Freemius Secret Key</option>
-                <option value="FRESHBOOKS_ACCESS_TOKEN">Freshbooks Access Token</option>
-                <option value="GCP_API_KEY">Gcp Api Key</option>
-                <option value="GITEA_ACCESS_TOKEN">Gitea Access Token</option>
-                <option value="GITHUB_APP_TOKEN">Github App Token</option>
-                <option value="GITHUB_FINE_GRAINED_PAT">Github Fine Grained Pat</option>
-                <option value="GITHUB_OAUTH">Github Oauth</option>
-                <option value="GITHUB_PAT">Github Pat</option>
-                <option value="GITHUB_REFRESH_TOKEN">Github Refresh Token</option>
-                <option value="GITLAB_CICD_JOB_TOKEN">Gitlab Cicd Job Token</option>
-                <option value="GITLAB_DEPLOY_TOKEN">Gitlab Deploy Token</option>
-                <option value="GITLAB_FEATURE_FLAG_CLIENT_TOKEN">Gitlab Feature Flag Client Token</option>
-                <option value="GITLAB_FEED_TOKEN">Gitlab Feed Token</option>
-                <option value="GITLAB_INCOMING_MAIL_TOKEN">Gitlab Incoming Mail Token</option>
-                <option value="GITLAB_KUBERNETES_AGENT_TOKEN">Gitlab Kubernetes Agent Token</option>
-                <option value="GITLAB_OAUTH_APP_SECRET">Gitlab Oauth App Secret</option>
-                <option value="GITLAB_PAT">Gitlab Pat</option>
-                <option value="GITLAB_PAT_ROUTABLE">Gitlab Pat Routable</option>
-                <option value="GITLAB_PTT">Gitlab Ptt</option>
-                <option value="GITLAB_RRT">Gitlab Rrt</option>
-                <option value="GITLAB_RUNNER_AUTHENTICATION_TOKEN">Gitlab Runner Authentication Token</option>
-                <option value="GITLAB_RUNNER_AUTHENTICATION_TOKEN_ROUTABLE">Gitlab Runner Authentication Token Routable</option>
-                <option value="GITLAB_SCIM_TOKEN">Gitlab Scim Token</option>
-                <option value="GITLAB_SESSION_COOKIE">Gitlab Session Cookie</option>
-                <option value="GITTER_ACCESS_TOKEN">Gitter Access Token</option>
-                <option value="GOCARDLESS_API_TOKEN">Gocardless Api Token</option>
-                <option value="GRAFANA_API_KEY">Grafana Api Key</option>
-                <option value="GRAFANA_CLOUD_API_TOKEN">Grafana Cloud Api Token</option>
-                <option value="GRAFANA_SERVICE_ACCOUNT_TOKEN">Grafana Service Account Token</option>
-                <option value="GREPTILE_API_KEY">Greptile Api Key</option>
-                <option value="GROQ_API_KEY">Groq Api Key</option>
-                <option value="HARNESS_API_KEY">Harness Api Key</option>
-                <option value="HASHICORP_TF_API_TOKEN">Hashicorp Tf Api Token</option>
-                <option value="HASHICORP_TF_PASSWORD">Hashicorp Tf Password</option>
-                <option value="HEROKU_API_KEY">Heroku Api Key</option>
-                <option value="HUBSPOT_API_KEY">Hubspot Api Key</option>
-                <option value="HUGGINGFACE_ACCESS_TOKEN">Huggingface Access Token</option>
-                <option value="HUGGINGFACE_ORGANIZATION_API_TOKEN">Huggingface Organization Api Token</option>
-                <option value="INFRACOST_API_TOKEN">Infracost Api Token</option>
-                <option value="INTERCOM_API_KEY">Intercom Api Key</option>
-                <option value="INTRA42_CLIENT_SECRET">Intra42 Client Secret</option>
-                <option value="JFROG_API_KEY">Jfrog Api Key</option>
-                <option value="JFROG_IDENTITY_TOKEN">Jfrog Identity Token</option>
-                <option value="JWT">Jwt</option>
-                <option value="KRAKEN_ACCESS_TOKEN">Kraken Access Token</option>
-                <option value="KUBERNETES_SECRET_YAML">Kubernetes Secret Yaml</option>
-                <option value="KUCOIN_ACCESS_TOKEN">Kucoin Access Token</option>
-                <option value="KUCOIN_SECRET_KEY">Kucoin Secret Key</option>
-                <option value="LAUNCHDARKLY_ACCESS_TOKEN">Launchdarkly Access Token</option>
-                <option value="LINEAR_API_KEY">Linear Api Key</option>
-                <option value="LINEAR_CLIENT_SECRET">Linear Client Secret</option>
-                <option value="LINKEDIN_CLIENT_ID">Linkedin Client Id</option>
-                <option value="LINKEDIN_CLIENT_SECRET">Linkedin Client Secret</option>
-                <option value="LOB_API_KEY">Lob Api Key</option>
-                <option value="LOB_PUB_API_KEY">Lob Pub Api Key</option>
-                <option value="LOOKER_CLIENT_ID">Looker Client Id</option>
-                <option value="LOOKER_CLIENT_SECRET">Looker Client Secret</option>
-                <option value="MAILCHIMP_API_KEY">Mailchimp Api Key</option>
-                <option value="MAILGUN_PRIVATE_API_TOKEN">Mailgun Private Api Token</option>
-                <option value="MAILGUN_PUB_KEY">Mailgun Pub Key</option>
-                <option value="MAILGUN_SIGNING_KEY">Mailgun Signing Key</option>
-                <option value="MAPBOX_API_TOKEN">Mapbox Api Token</option>
-                <option value="MATTERMOST_ACCESS_TOKEN">Mattermost Access Token</option>
-                <option value="MAXMIND_LICENSE_KEY">Maxmind License Key</option>
-                <option value="MESSAGEBIRD_API_TOKEN">Messagebird Api Token</option>
-                <option value="MESSAGEBIRD_CLIENT_ID">Messagebird Client Id</option>
-                <option value="MICROSOFT_TEAMS_WEBHOOK">Microsoft Teams Webhook</option>
-                <option value="MISTRAL_API_KEY">Mistral Api Key</option>
-                <option value="NETLIFY_ACCESS_TOKEN">Netlify Access Token</option>
-                <option value="NEW_RELIC_BROWSER_API_TOKEN">New Relic Browser Api Token</option>
-                <option value="NEW_RELIC_INSERT_KEY">New Relic Insert Key</option>
-                <option value="NEW_RELIC_USER_API_ID">New Relic User Api Id</option>
-                <option value="NEW_RELIC_USER_API_KEY">New Relic User Api Key</option>
-                <option value="NOTION_API_TOKEN">Notion Api Token</option>
-                <option value="NPM_ACCESS_TOKEN">Npm Access Token</option>
-                <option value="NUGET_CONFIG_PASSWORD">Nuget Config Password</option>
-                <option value="NVIDIA_API_KEY">Nvidia Api Key</option>
-                <option value="NYTIMES_ACCESS_TOKEN">Nytimes Access Token</option>
-                <option value="OCTOPUS_DEPLOY_API_KEY">Octopus Deploy Api Key</option>
-                <option value="OKTA_ACCESS_TOKEN">Okta Access Token</option>
-                <option value="OLLAMA_API_KEY">Ollama Api Key</option>
-                <option value="OPENAI_API_KEY">Openai Api Key</option>
-                <option value="OPENROUTER_API_KEY">Openrouter Api Key</option>
-                <option value="OPENSHIFT_USER_TOKEN">Openshift User Token</option>
-                <option value="PLAID_API_TOKEN">Plaid Api Token</option>
-                <option value="PLAID_CLIENT_ID">Plaid Client Id</option>
-                <option value="PLAID_SECRET_KEY">Plaid Secret Key</option>
-                <option value="PLANETSCALE_API_TOKEN">Planetscale Api Token</option>
-                <option value="PLANETSCALE_ID">Planetscale Id</option>
-                <option value="PLANETSCALE_OAUTH_TOKEN">Planetscale Oauth Token</option>
-                <option value="PLANETSCALE_PASSWORD">Planetscale Password</option>
-                <option value="POSTHOG_PERSONAL_API_KEY">Posthog Personal Api Key</option>
-                <option value="POSTHOG_PROJECT_API_KEY">Posthog Project Api Key</option>
-                <option value="POSTMAN_API_TOKEN">Postman Api Token</option>
-                <option value="PREFECT_API_TOKEN">Prefect Api Token</option>
-                <option value="PRIVATEAI_API_TOKEN">Privateai Api Token</option>
-                <option value="PULUMI_API_TOKEN">Pulumi Api Token</option>
-                <option value="PYPI_UPLOAD_TOKEN">Pypi Upload Token</option>
-                <option value="RAPIDAPI_ACCESS_TOKEN">Rapidapi Access Token</option>
-                <option value="README_API_TOKEN">Readme Api Token</option>
-                <option value="REPLICATE_API_TOKEN">Replicate Api Token</option>
-                <option value="RUBYGEMS_API_TOKEN">Rubygems Api Token</option>
-                <option value="SCALINGO_API_TOKEN">Scalingo Api Token</option>
-                <option value="SENDBIRD_ACCESS_ID">Sendbird Access Id</option>
-                <option value="SENDBIRD_ACCESS_TOKEN">Sendbird Access Token</option>
-                <option value="SENDGRID_API_TOKEN">Sendgrid Api Token</option>
-                <option value="SENDINBLUE_API_TOKEN">Sendinblue Api Token</option>
-                <option value="SENTRY_ACCESS_TOKEN">Sentry Access Token</option>
-                <option value="SENTRY_ORG_TOKEN">Sentry Org Token</option>
-                <option value="SENTRY_USER_TOKEN">Sentry User Token</option>
-                <option value="SETTLEMINT_APPLICATION_ACCESS_TOKEN">Settlemint Application Access Token</option>
-                <option value="SETTLEMINT_PERSONAL_ACCESS_TOKEN">Settlemint Personal Access Token</option>
-                <option value="SETTLEMINT_SERVICE_ACCESS_TOKEN">Settlemint Service Access Token</option>
-                <option value="SHIPPO_API_TOKEN">Shippo Api Token</option>
-                <option value="SHOPIFY_ACCESS_TOKEN">Shopify Access Token</option>
-                <option value="SHOPIFY_CUSTOM_ACCESS_TOKEN">Shopify Custom Access Token</option>
-                <option value="SHOPIFY_PRIVATE_APP_ACCESS_TOKEN">Shopify Private App Access Token</option>
-                <option value="SHOPIFY_SHARED_SECRET">Shopify Shared Secret</option>
-                <option value="SIDEKIQ_SECRET">Sidekiq Secret</option>
-                <option value="SIDEKIQ_SENSITIVE_URL">Sidekiq Sensitive Url</option>
-                <option value="SLACK_APP_TOKEN">Slack App Token</option>
-                <option value="SLACK_BOT_TOKEN">Slack Bot Token</option>
-                <option value="SLACK_CONFIG_ACCESS_TOKEN">Slack Config Access Token</option>
-                <option value="SLACK_CONFIG_REFRESH_TOKEN">Slack Config Refresh Token</option>
-                <option value="SLACK_LEGACY_BOT_TOKEN">Slack Legacy Bot Token</option>
-                <option value="SLACK_LEGACY_TOKEN">Slack Legacy Token</option>
-                <option value="SLACK_LEGACY_WORKSPACE_TOKEN">Slack Legacy Workspace Token</option>
-                <option value="SLACK_USER_TOKEN">Slack User Token</option>
-                <option value="SLACK_WEBHOOK_URL">Slack Webhook Url</option>
-                <option value="SNYK_API_TOKEN">Snyk Api Token</option>
-                <option value="SONAR_API_TOKEN">Sonar Api Token</option>
-                <option value="SOURCEGRAPH_ACCESS_TOKEN">Sourcegraph Access Token</option>
-                <option value="SQUARESPACE_ACCESS_TOKEN">Squarespace Access Token</option>
-                <option value="SQUARE_ACCESS_TOKEN">Square Access Token</option>
-                <option value="STABILITY_AI_API_KEY">Stability Ai Api Key</option>
-                <option value="STRIPE_ACCESS_TOKEN">Stripe Access Token</option>
-                <option value="SUMOLOGIC_ACCESS_ID">Sumologic Access Id</option>
-                <option value="SUMOLOGIC_ACCESS_TOKEN">Sumologic Access Token</option>
-                <option value="TELEGRAM_BOT_API_TOKEN">Telegram Bot Api Token</option>
-                <option value="TOGETHERAI_API_KEY">Togetherai Api Key</option>
-                <option value="TRAVISCI_ACCESS_TOKEN">Travisci Access Token</option>
-                <option value="TWILIO_API_KEY">Twilio Api Key</option>
-                <option value="TWITCH_API_TOKEN">Twitch Api Token</option>
-                <option value="TWITTER_ACCESS_SECRET">Twitter Access Secret</option>
-                <option value="TWITTER_ACCESS_TOKEN">Twitter Access Token</option>
-                <option value="TWITTER_API_KEY">Twitter Api Key</option>
-                <option value="TWITTER_API_SECRET">Twitter Api Secret</option>
-                <option value="TWITTER_BEARER_TOKEN">Twitter Bearer Token</option>
-                <option value="TYPEFORM_API_TOKEN">Typeform Api Token</option>
-                <option value="VAULT_BATCH_TOKEN">Vault Batch Token</option>
-                <option value="VAULT_SERVICE_TOKEN">Vault Service Token</option>
-                <option value="VERCEL_AI_GATEWAY_KEY">Vercel Ai Gateway Key</option>
-                <option value="VERCEL_API_TOKEN">Vercel Api Token</option>
-                <option value="VERCEL_APP_ACCESS_TOKEN">Vercel App Access Token</option>
-                <option value="VERCEL_APP_REFRESH_TOKEN">Vercel App Refresh Token</option>
-                <option value="VERCEL_INTEGRATION_TOKEN">Vercel Integration Token</option>
-                <option value="VERCEL_PERSONAL_ACCESS_TOKEN">Vercel Personal Access Token</option>
-                <option value="WEIGHTS_AND_BIASES_API_KEY">Weights And Biases Api Key</option>
-                <option value="XAI_API_KEY">Xai Api Key</option>
-                <option value="YANDEX_ACCESS_TOKEN">Yandex Access Token</option>
-                <option value="YANDEX_API_KEY">Yandex Api Key</option>
-                <option value="YANDEX_AWS_ACCESS_TOKEN">Yandex Aws Access Token</option>
-                <option value="ZENDESK_SECRET_KEY">Zendesk Secret Key</option>
-              </optgroup>
+              {(() => {
+                const groupedTypes: Record<string, typeof ALL_KNOWN_TYPES> = {};
+                for (const t of ALL_KNOWN_TYPES) {
+                  const category = getMacroCategory(t.value);
+                  if (!groupedTypes[category.id]) {
+                    groupedTypes[category.id] = [];
+                  }
+                  groupedTypes[category.id].push(t);
+                }
+                
+                return Object.entries(groupedTypes).map(([categoryId, types]) => {
+                  const category = MACRO_CATEGORIES[categoryId];
+                  return (
+                    <optgroup key={categoryId} label={category.name}>
+                      {types.map(t => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                });
+              })()}
             </select>
           </div>
           <div>
@@ -650,7 +379,15 @@ export default function Findings() {
             <select
               className="input"
               value={filters.domain}
-              onChange={(e) => { setFilters({ ...filters, domain: e.target.value }); setPage(1); }}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFilters({ ...filters, domain: val });
+                setPage(1);
+                const newParams = new URLSearchParams(searchParams);
+                if (val) newParams.set('domain', val);
+                else newParams.delete('domain');
+                setSearchParams(newParams);
+              }}
             >
               <option value="">All Domains</option>
               {domainsData?.map((domain) => (
@@ -663,7 +400,15 @@ export default function Findings() {
             <select
               className="input"
               value={filters.status}
-              onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFilters({ ...filters, status: val });
+                setPage(1);
+                const newParams = new URLSearchParams(searchParams);
+                if (val) newParams.set('status', val);
+                else newParams.delete('status');
+                setSearchParams(newParams);
+              }}
             >
               <option value="">All</option>
               <option value="unreviewed">🔲 Unreviewed</option>
@@ -762,8 +507,14 @@ export default function Findings() {
                         {finding.criticality}
                       </span>
                       <span
-                        className="px-3 py-1 rounded-sm text-xs uppercase tracking-wider"
-                        style={{ border: '1px solid rgba(59,130,246,0.2)', backgroundColor: 'rgba(30,58,138,0.1)', color: '#93C5FD' }}
+                        onClick={() => {
+                          const newParams = new URLSearchParams(searchParams);
+                          newParams.set('type', finding.primaryType);
+                          setSearchParams(newParams);
+                        }}
+                        title={`Filter by ${finding.primaryType.replace(/_/g, ' ')}`}
+                        className="px-3 py-1 rounded-sm text-xs uppercase tracking-wider cursor-pointer hover:bg-blue-900/40 hover:border-blue-400 transition-colors"
+                        style={{ border: '1px solid rgba(59,130,246,0.2)', backgroundColor: 'rgba(30,58,138,0.1)', color: '#93C5FD', cursor: 'pointer' }}
                       >
                         {finding.primaryType.replace(/_/g, ' ')}
                       </span>
@@ -844,7 +595,17 @@ export default function Findings() {
                                     className="px-2 py-0.5 rounded-sm text-xs uppercase tracking-wider font-bold"
                                     style={{ ...CRITICALITY_BADGE_STYLES[secret.criticality] }}
                                   >{secret.criticality}</span>
-                                  <span className="text-blue-400 font-bold text-xs uppercase">{secret.type.replace(/_/g, ' ')}</span>
+                                  <span
+                                    onClick={() => {
+                                      const newParams = new URLSearchParams(searchParams);
+                                      newParams.set('type', secret.type);
+                                      setSearchParams(newParams);
+                                    }}
+                                    title={`Filter by ${secret.type.replace(/_/g, ' ')}`}
+                                    className="text-blue-400 font-bold text-xs uppercase cursor-pointer hover:underline"
+                                  >
+                                    {secret.type.replace(/_/g, ' ')}
+                                  </span>
                                 </div>
 
                                 <div className="mb-3 p-3 rounded-sm font-mono text-sm" style={{ border: '1px solid rgba(139,92,246,0.15)', backgroundColor: 'rgba(0,0,0,0.3)' }}>

@@ -108,31 +108,32 @@ class GitHubService {
         })
       );
 
-      const results: SearchResult[] = [];
+      const results = await Promise.all(
+        response.data.items.map(async (item) => {
+          try {
+            // Use blob API with item.sha (blob SHA) — getContent with blob SHA returns 404
+            const content = await this.getBlobContent(
+              item.repository.owner.login,
+              item.repository.name,
+              item.sha
+            );
 
-      for (const item of response.data.items) {
-        try {
-          // Use blob API with item.sha (blob SHA) — getContent with blob SHA returns 404
-          const content = await this.getBlobContent(
-            item.repository.owner.login,
-            item.repository.name,
-            item.sha
-          );
+            return {
+              repository: item.repository.full_name,
+              repositoryUrl: item.repository.html_url,
+              filePath: item.path,
+              content,
+              sha: item.sha,
+              htmlUrl: item.html_url,
+            };
+          } catch (error) {
+            logger.error(`Error fetching content for ${item.path}:`, error);
+            return null;
+          }
+        })
+      );
 
-          results.push({
-            repository: item.repository.full_name,
-            repositoryUrl: item.repository.html_url,
-            filePath: item.path,
-            content,
-            sha: item.sha,
-            htmlUrl: item.html_url,
-          });
-        } catch (error) {
-          logger.error(`Error fetching content for ${item.path}:`, error);
-        }
-      }
-
-      return results;
+      return results.filter((r): r is SearchResult => r !== null);
     } catch (error: any) {
       const remainingRetries = options.retries ?? 3;
       if ((error.status === 403 || error.status === 429) && remainingRetries > 0) {
