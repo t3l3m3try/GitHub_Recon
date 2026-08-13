@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
+import { scopeFor } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import { getMacroCategory } from '../utils/macroCategories';
 import { SECRET_PATTERNS } from '../utils/patterns';
@@ -61,11 +62,8 @@ export async function getFindings(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const where: any = {
-      scan: {
-        userId
-      }
-    };
+    const scope = scopeFor(req);
+    const where: any = { ...scope.finding };
 
     if (criticality) {
       where.criticality = criticality as string;
@@ -99,11 +97,10 @@ export async function getFindings(req: Request, res: Response) {
     }
 
     if (domain) {
+      // Merge with the tenant scope rather than replacing it
       where.scan = {
         ...where.scan,
-        domain: {
-          name: domain as string
-        }
+        domain: { ...(where.scan?.domain ?? {}), name: domain as string }
       };
     }
 
@@ -184,8 +181,9 @@ export async function getFinding(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const finding = await prisma.finding.findUnique({
-      where: { id },
+    const scope = scopeFor(req);
+    const finding = await prisma.finding.findFirst({
+      where: { id, ...scope.finding },
       include: {
         scan: {
           include: {
@@ -198,10 +196,6 @@ export async function getFinding(req: Request, res: Response) {
 
     if (!finding) {
       return res.status(404).json({ error: 'Finding not found' });
-    }
-
-    if (finding.scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
     }
 
     res.json(finding);
@@ -225,17 +219,14 @@ export async function updateFinding(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const finding = await prisma.finding.findUnique({
-      where: { id },
+    const scope = scopeFor(req);
+    const finding = await prisma.finding.findFirst({
+      where: { id, ...scope.finding },
       include: { scan: true }
     });
 
     if (!finding) {
       return res.status(404).json({ error: 'Finding not found' });
-    }
-
-    if (finding.scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
     }
 
     const updated = await prisma.finding.update({
@@ -274,24 +265,32 @@ export async function bulkUpdateFindings(req: Request, res: Response) {
       return res.status(400).json({ error: 'Finding IDs array is required' });
     }
 
-    // Verify all findings belong to user
+    // Every id must be inside the requester's scope
+    const scope = scopeFor(req);
     const findings = await prisma.finding.findMany({
-      where: {
-        id: { in: findingIds },
-        scan: { userId }
-      }
+      where: { id: { in: findingIds }, ...scope.finding },
+      select: { id: true }
     });
 
     if (findings.length !== findingIds.length) {
       return res.status(403).json({ error: 'Access denied or findings not found' });
     }
 
-    // Perform bulk update
+    // Restrict the write to the ids we just authorised, and to the fields a
+    // client is allowed to change.
+    const allowed: any = {};
+    if (typeof updates?.verified === 'boolean') allowed.verified = updates.verified;
+    if (typeof updates?.falsePositive === 'boolean') allowed.falsePositive = updates.falsePositive;
+    if (typeof updates?.acknowledged === 'boolean') allowed.acknowledged = updates.acknowledged;
+    if (typeof updates?.notes === 'string') allowed.notes = updates.notes;
+
+    if (Object.keys(allowed).length === 0) {
+      return res.status(400).json({ error: 'No updatable fields provided' });
+    }
+
     const result = await prisma.finding.updateMany({
-      where: {
-        id: { in: findingIds }
-      },
-      data: updates
+      where: { id: { in: findings.map(f => f.id) } },
+      data: allowed
     });
 
     logger.info(`Bulk updated ${result.count} findings`);
@@ -316,17 +315,14 @@ export async function deleteFinding(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const finding = await prisma.finding.findUnique({
-      where: { id },
+    const scope = scopeFor(req);
+    const finding = await prisma.finding.findFirst({
+      where: { id, ...scope.finding },
       include: { scan: true }
     });
 
     if (!finding) {
       return res.status(404).json({ error: 'Finding not found' });
-    }
-
-    if (finding.scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
     }
 
     await prisma.finding.delete({
@@ -339,6 +335,60 @@ export async function deleteFinding(req: Request, res: Response) {
   } catch (error: any) {
     logger.error('Error deleting finding:', error);
     res.status(500).json({ error: 'Failed to delete finding' });
+  }
+}
+
+/**
+ * Export findings as CSV
+ * GET /api/findings/export
+ *
+ * Gated by the finding:export permission, which an organization can withdraw
+ * from all of its members via its canExport toggle.
+ */
+export async function exportFindings(req: Request, res: Response) {
+  try {
+    const { domain, criticality } = req.query;
+    const scope = scopeFor(req);
+
+    const where: any = { ...scope.finding };
+    if (criticality) where.criticality = criticality as string;
+    if (domain) {
+      where.scan = { ...(where.scan ?? {}), domain: { ...(where.scan?.domain ?? {}), name: domain as string } };
+    }
+
+    const findings = await prisma.finding.findMany({
+      where,
+      include: { scan: { include: { domain: true } }, secrets: true },
+      orderBy: { score: 'desc' },
+      take: 10000,
+    });
+
+    const escape = (value: any) => {
+      const text = value === null || value === undefined ? '' : String(value);
+      return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+
+    const header = [
+      'domain', 'criticality', 'score', 'primaryType', 'repository', 'filePath',
+      'fileUrl', 'commitDate', 'verified', 'falsePositive', 'acknowledged', 'secretCount', 'secretTypes',
+    ];
+
+    const rows = findings.map(f => [
+      f.scan?.domain?.name, f.criticality, f.score, f.primaryType, f.repository, f.filePath,
+      f.fileUrl, f.commitDate?.toISOString() ?? '', f.verified, f.falsePositive, f.acknowledged,
+      f.secrets.length, Array.from(new Set(f.secrets.map(s => s.type))).join(' '),
+    ].map(escape).join(','));
+
+    const csv = [header.join(','), ...rows].join('\n');
+
+    logger.info(`Findings exported by ${req.user?.email}: ${findings.length} row(s)`);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="findings-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  } catch (error: any) {
+    logger.error('Error exporting findings:', error);
+    res.status(500).json({ error: 'Failed to export findings' });
   }
 }
 
@@ -356,9 +406,10 @@ export async function getStatistics(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const baseWhere: any = { scan: { userId } };
+    const scope = scopeFor(req);
+    const baseWhere: any = { ...scope.finding };
     if (domain) {
-      baseWhere.scan = { ...baseWhere.scan, domain: { name: domain as string } };
+      baseWhere.scan = { ...(baseWhere.scan ?? {}), domain: { ...(baseWhere.scan?.domain ?? {}), name: domain as string } };
     }
 
     // Optimized: single groupBy for criticality counts instead of 8 separate COUNT queries

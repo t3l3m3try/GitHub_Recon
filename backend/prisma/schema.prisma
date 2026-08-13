@@ -9,24 +9,112 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// A tenant. All domains, scans and findings belong to exactly one organization,
+/// and members only ever see their own organization's data. The super admin
+/// belongs to no organization and sees everything.
+/// The quota/feature fields act as a ceiling: a member's effective capability is
+/// their own permission AND what the organization allows.
+model Organization {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  active      Boolean  @default(true)   // false suspends every member
+  maxDomains  Int      @default(10)
+  maxUsers    Int      @default(25)
+  canRunScans Boolean  @default(true)
+  canExport   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users   User[]
+  domains Domain[]
+
+  @@index([slug])
+  @@index([active])
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  githubId  String?  @unique
-  apiKey    String?  // Encrypted GitHub token
-  role      String   @default("USER")
+  id       String  @id @default(uuid())
+  email    String  @unique
+  username String  @unique
+  /// bcrypt hash — never store or log the plaintext password
+  passwordHash String
+  githubId String? @unique
+  apiKey   String? // Encrypted GitHub token
+
+  /// SUPER_ADMIN | ORG_ADMIN | ANALYST | VIEWER — see utils/permissions.ts
+  role String @default("ANALYST")
+  /// JSON overrides on top of the role defaults: {"granted":[...],"revoked":[...]}
+  permissions String?
+
+  /// null only for SUPER_ADMIN, who is not scoped to a tenant
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Restrict)
+
+  active             Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  /// Brute-force protection: cleared on any successful login
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  domains   Domain[]
-  scans     Scan[]
+
+  domains       Domain[]
+  scans         Scan[]
+  sessions      Session[]
+  querySettings QuerySetting[]
 
   @@index([email])
+  @@index([username])
+  @@index([orgId])
+  @@index([active])
+}
+
+/// One row per issued refresh token. Only the SHA-256 of the token is stored, so
+/// a database leak cannot be replayed. Rotated on every refresh.
+model Session {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Append-only trail of security-relevant actions (logins, user/org changes).
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  actorEmail String?
+  action     String
+  targetType String?
+  targetId   String?
+  detail     String?
+  ip         String?
+  success    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Domain {
   id            String    @id @default(uuid())
   name          String
+  /// Owning tenant — this is what scopes visibility
+  orgId         String?
+  organization  Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// Who added it (kept for attribution; does NOT restrict visibility)
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   active        Boolean   @default(true)
@@ -36,8 +124,9 @@ model Domain {
   updatedAt     DateTime  @updatedAt
   scans         Scan[]
 
-  // Compound unique constraint: each user can have one domain with a given name
-  @@unique([userId, name])
+  // Each organization can have one domain with a given name
+  @@unique([orgId, name])
+  @@index([orgId])
   @@index([userId])
   @@index([active, lastScanAt])
   @@index([name])
@@ -114,6 +203,22 @@ model Secret {
   @@index([findingId])
   @@index([type])
   @@index([content])
+}
+
+/// Per-user opt-out list for catalog queries (see src/utils/queryCatalog.ts).
+/// Storage is sparse: a missing row means the query is ENABLED, so newly added
+/// catalog queries are live by default and only explicit toggles are persisted.
+/// Cascades from User so deleting an account cannot leave orphaned preferences.
+model QuerySetting {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  queryId   String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, queryId])
+  @@index([userId])
 }
 
 // SQLite doesn't support enums, so we use strings with comments for valid values

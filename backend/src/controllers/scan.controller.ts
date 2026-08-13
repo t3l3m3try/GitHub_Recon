@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import ScannerService from '../services/scanner.service';
+import { getEnabledQueryIds } from '../services/queryPreferences.service';
+import { scopeFor } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 
 /**
@@ -21,18 +23,22 @@ export async function createScan(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get domain
-    const domain = await prisma.domain.findUnique({
-      where: { id: domainId }
+    // Domain must be visible to the requester (their organization, or any for
+    // a super admin) — an out-of-scope id is simply not found.
+    const scope = scopeFor(req);
+    const domain = await prisma.domain.findFirst({
+      where: { id: domainId, ...scope.domain },
+      include: { organization: true }
     });
 
     if (!domain) {
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    // Check if domain belongs to user
-    if (domain.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (domain.organization && !domain.organization.canRunScans) {
+      return res.status(403).json({
+        error: `Scanning is disabled for organization "${domain.organization.name}"`
+      });
     }
 
     // Check if there's already a running scan for this domain
@@ -47,6 +53,15 @@ export async function createScan(req: Request, res: Response) {
       return res.status(409).json({
         error: 'A scan is already running for this domain. Cancel it first or wait for completion.',
         runningScanId: runningScan.id
+      });
+    }
+
+    // A scan with no enabled queries would do nothing — fail fast rather than
+    // creating an empty scan record.
+    const enabledQueryIds = await getEnabledQueryIds(userId);
+    if (enabledQueryIds.size === 0) {
+      return res.status(400).json({
+        error: 'No queries are enabled. Enable at least one query in the Queries section before scanning.'
       });
     }
 
@@ -65,11 +80,7 @@ export async function createScan(req: Request, res: Response) {
     setImmediate(async () => {
       try {
         const scanner = new ScannerService(process.env.GITHUB_TOKEN || '');
-        await scanner.executeScan(scan.id, domain.name, {
-          includeCode: true,
-          includeCommits: true,
-          includeIssues: true
-        });
+        await scanner.executeScan(scan.id, domain.name, { userId });
         logger.info(`Scan ${scan.id} completed successfully`);
       } catch (error: any) {
         logger.error(`Scan ${scan.id} failed:`, error);
@@ -96,7 +107,8 @@ export async function getScans(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const where: any = { userId };
+    const scope = scopeFor(req);
+    const where: any = { ...scope.scan };
 
     if (domainId) {
       where.domainId = domainId as string;
@@ -167,8 +179,9 @@ export async function getScan(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const scan = await prisma.scan.findUnique({
-      where: { id },
+    const scope = scopeFor(req);
+    const scan = await prisma.scan.findFirst({
+      where: { id, ...scope.scan },
       include: {
         domain: true,
         findings: {
@@ -180,10 +193,6 @@ export async function getScan(req: Request, res: Response) {
 
     if (!scan) {
       return res.status(404).json({ error: 'Scan not found' });
-    }
-
-    if (scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Add live status and parsed progress
@@ -228,13 +237,12 @@ export async function getScanFindings(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Verify scan belongs to user
-    const scan = await prisma.scan.findUnique({
-      where: { id }
-    });
+    // Verify the scan is within the requester's scope
+    const scope = scopeFor(req);
+    const scan = await prisma.scan.findFirst({ where: { id, ...scope.scan } });
 
-    if (!scan || scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (!scan) {
+      return res.status(404).json({ error: 'Scan not found' });
     }
 
     const where: any = { scanId: id };
@@ -295,12 +303,11 @@ export async function cancelScan(req: Request, res: Response) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const scan = await prisma.scan.findUnique({
-      where: { id }
-    });
+    const scope = scopeFor(req);
+    const scan = await prisma.scan.findFirst({ where: { id, ...scope.scan } });
 
-    if (!scan || scan.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (!scan) {
+      return res.status(404).json({ error: 'Scan not found' });
     }
 
     if (scan.status !== 'QUEUED' && scan.status !== 'RUNNING') {

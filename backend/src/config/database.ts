@@ -22,8 +22,13 @@ prisma.$on('error', (e) => {
   logger.error('Prisma error:', e);
 });
 
-// Handle graceful shutdown
-process.on('beforeExit', async () => {
+// Handle graceful shutdown.
+// `beforeExit` fires again every time the handler queues async work, so guard
+// it — otherwise a short-lived script (like the seed) never exits.
+let disconnected = false;
+process.once('beforeExit', async () => {
+  if (disconnected) return;
+  disconnected = true;
   await prisma.$disconnect();
   logger.info('Prisma disconnected');
 });
@@ -35,19 +40,17 @@ export async function initializeDatabase() {
     await prisma.$queryRaw`SELECT 1`;
     logger.info('✅ Database connection successful');
 
-    // Ensure the development user exists
-    if (process.env.NODE_ENV === 'development') {
-      const user = await prisma.user.upsert({
-        where: { email: 'local@dev.com' },
-        update: {},
-        create: {
-          id: 'local-user-id',
-          email: 'local@dev.com',
-          password: 'test',
-          role: 'USER'
-        }
-      });
-      logger.info(`✅ Development user ready: ${user.email}`);
+    // No account is ever auto-provisioned — accounts only come from the seed
+    // script or an administrator. Just report whether the system is usable.
+    const superAdmins = await prisma.user.count({ where: { role: 'SUPER_ADMIN', active: true } });
+    if (superAdmins === 0) {
+      logger.warn('⚠️  No active super administrator exists. Run: npm run db:seed');
+    } else {
+      const [orgs, users] = await Promise.all([
+        prisma.organization.count(),
+        prisma.user.count({ where: { active: true } }),
+      ]);
+      logger.info(`✅ Access control ready: ${users} active user(s) across ${orgs} organization(s)`);
     }
   } catch (error: any) {
     logger.error('⚠️  Database initialization error:', error.message);

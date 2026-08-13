@@ -36,6 +36,12 @@ echo "🗄️  Setting up SQLite database..."
 cd backend
 npx prisma generate > /dev/null 2>&1
 DATABASE_URL="file:./dev.db" npx prisma db push --accept-data-loss > /dev/null 2>&1
+
+# Seed access control. Idempotent: existing accounts and organizations are left
+# untouched, and credentials are printed only for accounts created just now.
+echo ""
+echo "🔐 Ensuring access control is set up..."
+DATABASE_URL="file:./dev.db" npx tsx prisma/seed.ts 2>&1 | grep -vE "^20[0-9]{2}-|info\]|warn\]" || true
 cd ..
 
 echo ""

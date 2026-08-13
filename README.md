@@ -1,30 +1,34 @@
 # GitHub Recon
 
-A platform for detecting sensitive information and security vulnerabilities in public GitHub repositories. GitHub Recon helps organizations monitor their domains, email addresses, API keys, credentials, and other sensitive data that may have been accidentally exposed.
-
+A multi-tenant platform for detecting sensitive information exposed in public GitHub repositories. GitHub Recon monitors your organization's domains for leaked email addresses, API keys, credentials, private keys and other secrets, then ranks what it finds by how dangerous it actually is.
 
 <img width="1385" height="811" alt="2" src="https://github.com/user-attachments/assets/a42bc8ef-bdbb-484a-8ba9-1d98bb9ce1d2" />
 
-
 ## 🚀 Key Features
 
-- **Comprehensive Scanning**: Monitors repositories, commits, issues, and gists for exposed data.
-- **20+ Secret Types Detected**: Automatically identifies AWS keys, GitHub tokens, database URLs, and private keys.
-- **Intelligent Scoring**: Ranks findings by criticality (CRITICAL, HIGH, MEDIUM, LOW, INFO) using entropy analysis and surrounding context.
-- **Professional SOC Dashboard**: Features a newly designed dark-mode, Security Operations Center (SOC) style UI for clear analytics, reporting, and finding management.
+- **Comprehensive scanning** — searches code, commit messages and issues across public repositories, forks and wikis.
+- **280+ secret detection patterns** — AWS, GitHub, GitLab, cloud providers, payment processors, AI/ML services, databases, private keys and more.
+- **247 configurable search queries** — every GitHub search the scanner performs is listed, grouped and individually switchable. Turn off what you don't need and scans get proportionally cheaper.
+- **Intelligent scoring** — findings are ranked CRITICAL → INFO using entropy analysis, surrounding context and file type, so the noise sinks.
+- **Multi-tenancy** — organizations keep their data separate. Members see their own organization's domains and findings and nothing else.
+- **Role-based access control** — four roles plus per-user permission overrides, all administered from the UI.
+- **Secure authentication** — bcrypt password hashing, short-lived access tokens, rotating refresh tokens in httpOnly cookies, account lockout and an audit trail. See [SECURITY.md](SECURITY.md).
+- **SOC-style dashboard** — dark-mode analytics, triage and reporting.
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Recharts
 - **Backend**: Node.js, Express.js, TypeScript
 - **Database**: SQLite with Prisma ORM
+- **Auth**: JWT access tokens + rotating refresh sessions, bcrypt
 - **API**: GitHub REST API (Octokit)
 
 ## 🏁 Quick Start
 
 ### Prerequisites
-- Node.js (v18+)
-- GitHub Personal Access Token (requires `public_repo`, `read:user` scopes)
+
+- Node.js v18+
+- A GitHub Personal Access Token with the `public_repo` and `read:user` scopes
 
 ### Installation
 
@@ -38,28 +42,140 @@ A platform for detecting sensitive information and security vulnerabilities in p
    ```bash
    cp .env.example .env
    ```
-   Edit the `.env` file and add your GitHub token:
+   Edit `.env` and add your GitHub token:
    ```env
    GITHUB_TOKEN=your_github_personal_access_token_here
    ```
+   See [Configuration](#-configuration) for the optional settings.
 
-3. **Install and Run:**
-   The project includes a convenient script to install dependencies, set up the database, and start both the frontend and backend simultaneously:
+3. **Install and run:**
    ```bash
    ./run-local.sh
    ```
+   This installs dependencies, sets up the database, seeds the first administrator and starts both servers.
 
-4. **Access the platform:**
-   Open [http://localhost:5173](http://localhost:5173) in your browser.
+4. **Save the credentials.** On its first run the seed prints a super administrator account with a randomly generated password:
+
+   ```
+   ==============================================================================
+     CREDENTIALS — shown once. Copy them now, then change them at first login.
+   ==============================================================================
+   ```
+
+   This is the only time that password is displayed. It is stored as a bcrypt hash and cannot be recovered — if you lose it, you must reset it directly in the database.
+
+5. **Open** [http://localhost:5173](http://localhost:5173) and sign in. You will be required to set a new password before you can use the platform.
+
+## 👥 Organizations, Users and Permissions
+
+Every domain, scan and finding belongs to an **organization**. Members of an organization share visibility of its data; no member can see another organization's data through any endpoint, including by guessing record IDs.
+
+### Roles
+
+| Role | Scope |
+|---|---|
+| **Super Admin** | Every organization. Creates organizations and users, assigns users to organizations, and edits any user's permissions. Belongs to no organization itself. |
+| **Organization Admin** | One organization: its users, domains, scans and findings. |
+| **Analyst** | Adds domains, runs scans and triages findings within their organization. |
+| **Viewer** | Read-only access to their organization's data. |
+
+### Permissions
+
+Each role carries sensible defaults, and the super admin can grant or revoke individual permissions on any user from **Admin → Users → Permissions**. Overrides are stored as a *difference* against the role, so changing someone's role later re-applies that role's defaults rather than leaving stale grants behind.
+
+Available permissions: `domain:read` `domain:write` `domain:delete` `scan:run` `scan:cancel` `finding:read` `finding:update` `finding:delete` `finding:export` `query:read` `query:write` `user:manage` `org:manage` `admin:all`
+
+### Organization controls
+
+Each organization has settings that act as a **ceiling** on its members — a user can never do something their organization has switched off, regardless of their individual permissions:
+
+| Setting | Effect |
+|---|---|
+| `active` | Turning it off signs out every member immediately and blocks sign-in |
+| `canRunScans` | Withdraws `scan:run` / `scan:cancel` from all members |
+| `canExport` | Withdraws `finding:export` from all members |
+| `maxDomains` | Maximum domains the organization may monitor |
+| `maxUsers` | Maximum member accounts |
+
+### Getting started as an administrator
+
+1. Sign in as the super administrator and set a new password.
+2. Go to **Admin → Organizations → New Organization**.
+3. Go to **Admin → Users → New User**, pick a role and organization. A strong temporary password is generated and shown once — hand it to the user; they must change it at first sign-in.
+4. Adjust individual permissions from the shield icon on any user row.
+
+## 🔎 Queries
+
+The **Queries** section lists all 247 GitHub searches the scanner can perform, grouped by target and macro area:
+
+- **Code Search** — 193 queries across 16 areas (Email Discovery, Credentials & Auth, Cloud Infrastructure, Database & Storage, DevOps & CI/CD, Infrastructure as Code, Config & Secret Files, Backups & Shell History, Secret Managers, Package Registries, Payment & Fintech, Communication & SaaS, AI & Machine Learning, Monitoring, Internal Infra & Recon, Other Services)
+- **Commit Search** — 30 queries across 7 areas
+- **Issue Search** — 24 queries across 7 areas
+
+Every query is individually switchable and shows the exact GitHub syntax it will send, rendered against a domain of your choice. The selection is saved per user and applies to all of that user's future scans. A target with no enabled queries is skipped entirely.
+
+This matters for cost: each code query is paginated up to 10 pages of 100 results and re-run against forks, so a full 247-query scan is expensive against GitHub's rate limit of 30 search requests per minute. Narrowing the selection makes scans proportionally faster.
+
+## ⚙️ Configuration
+
+All settings are read from `.env` in the project root, or `backend/.env`. Neither is committed.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `GITHUB_TOKEN` | **yes** | — | GitHub PAT used for all searches |
+| `JWT_SECRET` | in production | auto-generated in dev | Signing key for access tokens; minimum 32 characters |
+| `DATABASE_URL` | — | `file:./dev.db` | Prisma connection string |
+| `PORT` | — | `3001` | Backend port |
+| `FRONTEND_URL` | — | `http://localhost:5173` | Allowed CORS origin (credentials mode forbids a wildcard) |
+| `NODE_ENV` | — | `development` | `production` enables Secure cookies and requires `JWT_SECRET` |
+| `SUPER_ADMIN_EMAIL` | — | `superadmin@localhost.local` | Email for the seeded administrator |
+| `SUPER_ADMIN_USERNAME` | — | `superadmin` | Username for the seeded administrator |
+| `SUPER_ADMIN_PASSWORD` | — | randomly generated | Supply your own; must satisfy the password policy |
+| `SEED_ORGANIZATIONS` | — | none | Comma-separated organizations to create on first run |
+| `DEFAULT_ORGANIZATION` | — | `Default Organization` | Adopts domains that have no organization |
+| `AUTH_RATE_LIMIT_MAX` | — | `30` | Failed sign-ins allowed per IP per window |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | — | `900000` | Rate limit window |
+
+### Generating a production JWT secret
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+## 📡 API
+
+All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/auth/refresh` and `/auth/password-policy` requires a valid access token, and each declares the permission it needs.
+
+| Area | Endpoints |
+|---|---|
+| **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `POST /auth/change-password` · `GET /auth/password-policy` |
+| **Domains** | `GET/POST /domains` · `GET/PUT/DELETE /domains/:id` |
+| **Scans** | `GET/POST /scans` · `GET /scans/:id` · `GET /scans/:id/findings` · `DELETE /scans/:id` |
+| **Findings** | `GET /findings` · `GET /findings/stats` · `GET /findings/export` · `GET/PUT/DELETE /findings/:id` · `POST /findings/bulk-update` |
+| **Queries** | `GET/PUT /queries` · `POST /queries/reset` |
+| **Admin** | `GET /admin/meta` · `GET/POST /admin/organizations` · `PUT/DELETE /admin/organizations/:id` · `GET/POST /admin/users` · `PUT/DELETE /admin/users/:id` · `POST /admin/users/:id/reset-password` · `POST /admin/users/:id/unlock` · `GET /admin/audit` |
+
+## 🗄️ Database
+
+```bash
+cd backend
+npm run db:push      # apply the schema
+npm run db:seed      # ensure a super administrator exists (idempotent)
+npm run db:studio    # browse the data
+```
+
+The seed never overwrites an existing account and prints credentials only for accounts it has just created.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request to help improve secret detection patterns, UI/UX, or backend performance.
+Contributions are welcome. Detection patterns, search queries, UI/UX and backend performance all have room to improve. Please open a pull request.
+
+When contributing, never commit `.env` files, database files, scan results or real credentials — see [SECURITY.md](SECURITY.md).
 
 ## 📄 License
 
-MIT License - see the LICENSE file for details.
+MIT License — see the LICENSE file for details.
 
 ---
 
-**⚠️ Important**: This tool is designed for defensive security purposes only. Always ensure you have proper authorization before scanning domains and repositories. Respect GitHub's Terms of Service and rate limits.
+**⚠️ Important**: This tool is for defensive security purposes only. Ensure you are authorized to scan the domains you monitor, and respect GitHub's Terms of Service and rate limits. Scan results contain real exposed secrets — treat the database as sensitive and never commit or share it.
