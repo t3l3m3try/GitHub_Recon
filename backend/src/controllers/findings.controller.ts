@@ -141,7 +141,11 @@ export async function getFindings(req: Request, res: Response) {
         include: {
           scan: {
             include: {
-              domain: true
+              domain: {
+                include: {
+                  organization: { select: { id: true, name: true, slug: true } }
+                }
+              }
             }
           },
           secrets: true
@@ -187,7 +191,11 @@ export async function getFinding(req: Request, res: Response) {
       include: {
         scan: {
           include: {
-            domain: true
+            domain: {
+              include: {
+                organization: { select: { id: true, name: true, slug: true } }
+              }
+            }
           }
         },
         secrets: true
@@ -358,7 +366,18 @@ export async function exportFindings(req: Request, res: Response) {
 
     const findings = await prisma.finding.findMany({
       where,
-      include: { scan: { include: { domain: true } }, secrets: true },
+      include: {
+        scan: {
+          include: {
+            domain: {
+              include: {
+                organization: { select: { id: true, name: true, slug: true } }
+              }
+            }
+          }
+        },
+        secrets: true
+      },
       orderBy: { score: 'desc' },
       take: 10000,
     });
@@ -369,12 +388,12 @@ export async function exportFindings(req: Request, res: Response) {
     };
 
     const header = [
-      'domain', 'criticality', 'score', 'primaryType', 'repository', 'filePath',
+      'organization', 'domain', 'criticality', 'score', 'primaryType', 'repository', 'filePath',
       'fileUrl', 'commitDate', 'verified', 'falsePositive', 'acknowledged', 'secretCount', 'secretTypes',
     ];
 
     const rows = findings.map(f => [
-      f.scan?.domain?.name, f.criticality, f.score, f.primaryType, f.repository, f.filePath,
+      f.scan?.domain?.organization?.name, f.scan?.domain?.name, f.criticality, f.score, f.primaryType, f.repository, f.filePath,
       f.fileUrl, f.commitDate?.toISOString() ?? '', f.verified, f.falsePositive, f.acknowledged,
       f.secrets.length, Array.from(new Set(f.secrets.map(s => s.type))).join(' '),
     ].map(escape).join(','));
@@ -412,6 +431,12 @@ export async function getStatistics(req: Request, res: Response) {
       baseWhere.scan = { ...(baseWhere.scan ?? {}), domain: { ...(baseWhere.scan?.domain ?? {}), name: domain as string } };
     }
 
+    // Cross-org breakdown for a super admin viewing every organization at
+    // once. Finding has no direct orgId (org is reached via scan -> domain),
+    // so groupBy can't express this — a raw join is the only way to get counts
+    // per organization without N+1 queries.
+    const wantsOrgBreakdown = scope.unscoped && !domain;
+
     // Optimized: single groupBy for criticality counts instead of 8 separate COUNT queries
     const [
       criticalityGroups,
@@ -422,7 +447,8 @@ export async function getStatistics(req: Request, res: Response) {
       topFiles,
       uniqueEmailGroups,
       uniqueRepositoriesGroups,
-      uniqueFilesGroups
+      uniqueFilesGroups,
+      orgBreakdownRows
     ] = await Promise.all([
       prisma.finding.groupBy({
         by: ['criticality'],
@@ -471,7 +497,22 @@ export async function getStatistics(req: Request, res: Response) {
       prisma.finding.groupBy({
         by: ['filePath'],
         where: baseWhere
-      })
+      }),
+      // Per-organization totals, only computed for the unscoped all-orgs view
+      wantsOrgBreakdown
+        ? prisma.$queryRaw<Array<{ orgId: string; orgName: string; orgSlug: string; total: number; critical: number; high: number }>>`
+            SELECT o.id as orgId, o.name as orgName, o.slug as orgSlug,
+              COUNT(f.id) as total,
+              SUM(CASE WHEN f.criticality = 'CRITICAL' THEN 1 ELSE 0 END) as critical,
+              SUM(CASE WHEN f.criticality = 'HIGH' THEN 1 ELSE 0 END) as high
+            FROM "Organization" o
+            JOIN "Domain" d ON d."orgId" = o.id
+            JOIN "Scan" s ON s."domainId" = d.id
+            JOIN "Finding" f ON f."scanId" = s.id
+            GROUP BY o.id, o.name, o.slug
+            ORDER BY total DESC
+          `
+        : Promise.resolve([])
     ]);
 
     // Build criticality map from groupBy result
@@ -510,7 +551,15 @@ export async function getStatistics(req: Request, res: Response) {
       uniqueEmails: uniqueEmailGroups.length,
       uniqueFindingTypes: byType.length,
       uniqueRepositories: uniqueRepositoriesGroups.length,
-      uniqueFiles: uniqueFilesGroups.length
+      uniqueFiles: uniqueFilesGroups.length,
+      byOrganization: (orgBreakdownRows as any[]).map((row) => ({
+        orgId: row.orgId,
+        orgName: row.orgName,
+        orgSlug: row.orgSlug,
+        total: Number(row.total),
+        critical: Number(row.critical),
+        high: Number(row.high),
+      }))
     });
   } catch (error: any) {
     logger.error('Error fetching statistics:', error);

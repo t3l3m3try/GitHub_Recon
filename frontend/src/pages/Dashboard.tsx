@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { findingsAPI, scanAPI, domainAPI } from '../lib/api';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { AlertTriangle, TrendingUp, Shield, Clock, AlertCircle, X, Globe, ChevronDown } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Shield, Clock, AlertCircle, X, Globe, ChevronDown, Building2 } from 'lucide-react';
 import { getMacroCategory } from '../utils/macroCategories';
+import { useOrgFilter } from '../contexts/OrgFilterContext';
 
 const CRITICALITY_COLORS = {
   critical: '#EF4444',
@@ -16,9 +17,11 @@ const CRITICALITY_COLORS = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { orgId, organizations } = useOrgFilter();
   const [selectedDomain, setSelectedDomain] = useState<string>(''); // '' = all domains
   const [domainDropdownOpen, setDomainDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectedOrg = organizations.find(o => o.id === orgId) || null;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -43,9 +46,9 @@ export default function Dashboard() {
 
   // Fetch list of all domains for the selector
   const { data: domainsData } = useQuery({
-    queryKey: ['domains-list'],
+    queryKey: ['domains-list', orgId],
     queryFn: async () => {
-      const response = await domainAPI.getAll();
+      const response = await domainAPI.getAll(orgId ? { orgId } : undefined);
       return response.data;
     },
   });
@@ -53,20 +56,22 @@ export default function Dashboard() {
   const selectedDomainObj = domains.find((d: any) => d.name === selectedDomain) || null;
 
   const { data: stats, isLoading: statsLoading, isFetching: statsFetching } = useQuery({
-    queryKey: ['stats', selectedDomain],
+    queryKey: ['stats', selectedDomain, orgId],
     queryFn: async () => {
       const params: any = {};
       if (selectedDomain) params.domain = selectedDomain;
+      if (orgId) params.orgId = orgId;
       const response = await findingsAPI.getStats(params);
       return response.data;
     },
   });
 
   const { data: scansData, isLoading: scansLoading } = useQuery({
-    queryKey: ['scans', { limit: 10, domainId: selectedDomainObj?.id || '' }],
+    queryKey: ['scans', { limit: 10, domainId: selectedDomainObj?.id || '', orgId }],
     queryFn: async () => {
       const params: any = { limit: 10, page: 1 };
       if (selectedDomainObj?.id) params.domainId = selectedDomainObj.id;
+      if (orgId) params.orgId = orgId;
       const response = await scanAPI.getAll(params);
       return response.data;
     },
@@ -79,10 +84,11 @@ export default function Dashboard() {
 
   // Fetch top emails filtered by domain
   const { data: emailFindings } = useQuery({
-    queryKey: ['emails', selectedDomain],
+    queryKey: ['emails', selectedDomain, orgId],
     queryFn: async () => {
       const params: any = { type: 'EMAIL', limit: 10000 };
       if (selectedDomain) params.domain = selectedDomain;
+      if (orgId) params.orgId = orgId;
       const response = await findingsAPI.getAll(params);
       return response.data;
     },
@@ -90,9 +96,11 @@ export default function Dashboard() {
 
   // Fetch critical + high findings filtered by domain
   const { data: criticalFindings } = useQuery({
-    queryKey: ['critical-high-findings', selectedDomain],
+    queryKey: ['critical-high-findings', selectedDomain, orgId],
     queryFn: async () => {
-      const domainParam = selectedDomain ? { domain: selectedDomain } : {};
+      const domainParam: any = {};
+      if (selectedDomain) domainParam.domain = selectedDomain;
+      if (orgId) domainParam.orgId = orgId;
       const [critRes, highRes] = await Promise.all([
         findingsAPI.getAll({ criticality: 'CRITICAL', limit: 10, ...domainParam }),
         findingsAPI.getAll({ criticality: 'HIGH', limit: 10, ...domainParam }),
@@ -140,6 +148,7 @@ export default function Dashboard() {
 
   const topRepos = stats?.topRepositories?.slice(0, 10) || [];
   const topFiles = stats?.topFiles?.slice(0, 10) || [];
+  const byOrganization = stats?.byOrganization || [];
   const topTypes = (() => {
     if (!stats?.byType) return [];
     const macroMap: Record<string, { id: string; name: string; icon: string; color: string; count: number; subTypes: string[] }> = {};
@@ -204,7 +213,11 @@ export default function Dashboard() {
           <p className="text-gray-400 flex items-center gap-2 text-sm">
             {selectedDomain
               ? <>Showing findings for <span className="text-blue-400 font-semibold">{selectedDomain}</span></>
-              : 'Overview of your security findings across all domains'}
+              : selectedOrg
+                ? <>Showing findings for <span className="text-blue-400 font-semibold">{selectedOrg.name}</span></>
+                : organizations.length > 0
+                  ? 'Aggregated security findings across all organizations and domains'
+                  : 'Overview of your security findings across all domains'}
             {statsFetching && (
               <span className="inline-block w-3 h-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
             )}
@@ -788,6 +801,55 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Per-Organization Breakdown — only populated for a super admin's all-orgs view */}
+      {byOrganization.length > 0 && (
+        <div className="card" style={{ borderColor: 'rgba(139,92,246,0.15)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-200 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-violet-400" />
+              Findings by Organization
+            </h3>
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)' }}>
+              <span className="text-sm font-bold text-violet-400">{byOrganization.length}</span>
+              <span className="text-xs text-gray-400">organizations</span>
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                  <th className="pb-3 text-gray-400 uppercase tracking-wider text-xs font-semibold">Organization</th>
+                  <th className="pb-3 text-gray-400 uppercase tracking-wider text-xs font-semibold">Total Findings</th>
+                  <th className="pb-3 text-gray-400 uppercase tracking-wider text-xs font-semibold">Critical</th>
+                  <th className="pb-3 text-gray-400 uppercase tracking-wider text-xs font-semibold">High</th>
+                  <th className="pb-3 text-gray-400 uppercase tracking-wider text-xs font-semibold"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {byOrganization.map((org: any) => (
+                  <tr
+                    key={org.orgId}
+                    className="cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                    onClick={() => navigate(`/findings?orgId=${org.orgId}`)}
+                  >
+                    <td className="py-3 text-gray-200 font-medium text-sm">{org.orgName}</td>
+                    <td className="py-3 text-white font-bold text-sm">{org.total}</td>
+                    <td className="py-3">
+                      <span className="text-red-400 font-bold">{org.critical}</span>
+                    </td>
+                    <td className="py-3">
+                      <span className="text-orange-400 font-bold">{org.high}</span>
+                    </td>
+                    <td className="py-3 text-right text-gray-500 text-xs">View →</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Recent Scans */}
       <div className="card">
         <h3 className="text-base font-semibold mb-4 text-gray-200">Recent Scans</h3>
@@ -816,6 +878,11 @@ export default function Dashboard() {
                 >
                   <td className="py-3 text-gray-200 font-medium text-sm font-mono">
                     {scan.domain?.name}
+                    {organizations.length > 0 && (scan.domain as any)?.organization?.name && (
+                      <span className="ml-2 text-[10px] text-violet-400 font-sans" style={{ opacity: 0.75 }}>
+                        ({(scan.domain as any).organization.name})
+                      </span>
+                    )}
                   </td>
                   <td className="py-3">
                     <span

@@ -124,7 +124,11 @@ export async function getScans(req: Request, res: Response) {
       prisma.scan.findMany({
         where,
         include: {
-          domain: true
+          domain: {
+            include: {
+              organization: { select: { id: true, name: true, slug: true } }
+            }
+          }
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -183,7 +187,11 @@ export async function getScan(req: Request, res: Response) {
     const scan = await prisma.scan.findFirst({
       where: { id, ...scope.scan },
       include: {
-        domain: true,
+        domain: {
+          include: {
+            organization: { select: { id: true, name: true, slug: true } }
+          }
+        },
         findings: {
           take: 10,
           orderBy: { score: 'desc' }

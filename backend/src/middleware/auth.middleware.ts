@@ -137,11 +137,28 @@ export function blockIfPasswordChangeRequired(req: Request, res: Response, next:
  * Prisma `where` fragments that constrain a query to what the requester may see.
  * The super admin is unscoped; everyone else is pinned to their organization.
  * A user with no organization (and who is not a super admin) can see nothing.
+ *
+ * A super admin may additionally narrow their unscoped view to a single
+ * organization by passing `?orgId=`, so cross-org dashboards can drill down
+ * without losing the ability to see everything by default. The param is
+ * ignored for non-super-admins — they are already pinned to their own org.
  */
 export function scopeFor(req: Request) {
   const user = req.user;
 
   if (user?.isSuperAdmin) {
+    const requestedOrgId = typeof req.query.orgId === 'string' && req.query.orgId ? req.query.orgId : null;
+
+    if (requestedOrgId) {
+      return {
+        domain: { orgId: requestedOrgId } as any,
+        scan: { domain: { orgId: requestedOrgId } } as any,
+        finding: { scan: { domain: { orgId: requestedOrgId } } } as any,
+        orgId: requestedOrgId,
+        unscoped: false,
+      };
+    }
+
     return {
       domain: {} as any,
       scan: {} as any,

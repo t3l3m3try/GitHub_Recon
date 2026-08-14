@@ -1,26 +1,30 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { domainAPI, scanAPI, Domain, Scan } from '../lib/api';
-import { Plus, Play, Trash2, Clock, CheckCircle, Square, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Play, Trash2, Clock, CheckCircle, Square, RefreshCw, Loader2, Building2 } from 'lucide-react';
+import { useOrgFilter } from '../contexts/OrgFilterContext';
 
 export default function Domains() {
   const queryClient = useQueryClient();
+  const { orgId, setOrgId, organizations } = useOrgFilter();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newDomain, setNewDomain] = useState({ name: '', scanFrequency: 'manual' });
+  const [newDomain, setNewDomain] = useState({ name: '', scanFrequency: 'manual', orgId: '' });
 
   const { data: domains, isLoading } = useQuery({
-    queryKey: ['domains'],
+    queryKey: ['domains', orgId],
     queryFn: async () => {
-      const response = await domainAPI.getAll();
+      const response = await domainAPI.getAll(orgId ? { orgId } : undefined);
       return response.data;
     },
   });
 
   // Fetch active scans for all domains to show status
   const { data: scansData } = useQuery({
-    queryKey: ['active-scans'],
+    queryKey: ['active-scans', orgId],
     queryFn: async () => {
-      const response = await scanAPI.getAll({ limit: 50, page: 1 });
+      const params: any = { limit: 50, page: 1 };
+      if (orgId) params.orgId = orgId;
+      const response = await scanAPI.getAll(params);
       return response.data;
     },
     refetchInterval: (query) => {
@@ -41,12 +45,12 @@ export default function Domains() {
   }
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; scanFrequency: string }) =>
+    mutationFn: (data: { name: string; scanFrequency: string; orgId?: string }) =>
       domainAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['domains'] });
       setShowAddModal(false);
-      setNewDomain({ name: '', scanFrequency: 'manual' });
+      setNewDomain({ name: '', scanFrequency: 'manual', orgId: '' });
     },
   });
 
@@ -75,8 +79,8 @@ export default function Domains() {
 
   const handleAddDomain = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newDomain.name) {
-      createMutation.mutate(newDomain);
+    if (newDomain.name && (organizations.length === 0 || newDomain.orgId)) {
+      createMutation.mutate(organizations.length > 0 ? newDomain : { name: newDomain.name, scanFrequency: newDomain.scanFrequency });
     }
   };
 
@@ -124,18 +128,37 @@ export default function Domains() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-3xl font-bold mb-1 page-title" >Domains</h2>
-          <p className="text-gray-400 text-sm" >Manage domains to monitor for security findings</p>
+          <p className="text-gray-400 text-sm" >
+            {organizations.length > 0 && !orgId
+              ? 'Manage domains across all organizations'
+              : 'Manage domains to monitor for security findings'}
+          </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn btn-primary flex items-center space-x-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Domain</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {organizations.length > 0 && (
+            <select
+              className="input"
+              style={{ minWidth: '200px' }}
+              value={orgId}
+              onChange={(e) => setOrgId(e.target.value)}
+            >
+              <option value="">All Organizations</option>
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => { setNewDomain(d => ({ ...d, orgId })); setShowAddModal(true); }}
+            className="btn btn-primary flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Domain</span>
+          </button>
+        </div>
       </div>
 
       {/* Domains Grid */}
@@ -161,6 +184,12 @@ export default function Domains() {
                   <div className="text-xs text-gray-500 uppercase tracking-wider" >
                     Scan Frequency: {domain.scanFrequency}
                   </div>
+                  {organizations.length > 0 && domain.organization?.name && (
+                    <div className="flex items-center gap-1 text-xs text-violet-400 mt-1.5">
+                      <Building2 className="w-3 h-3" />
+                      <span>{domain.organization.name}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Scan Progress */}
@@ -335,6 +364,28 @@ export default function Domains() {
                 </p>
               </div>
 
+              {organizations.length > 0 && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2 uppercase tracking-wider" >
+                    Organization *
+                  </label>
+                  <select
+                    className="input"
+                    value={newDomain.orgId}
+                    onChange={(e) => setNewDomain({ ...newDomain, orgId: e.target.value })}
+                    required
+                  >
+                    <option value="">Select an organization</option>
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1" >
+                    As a super admin, you must choose which organization owns this domain
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm text-gray-400 mb-2 uppercase tracking-wider" >
                   Scan Frequency
@@ -363,7 +414,7 @@ export default function Domains() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createMutation.isPending}
+                  disabled={createMutation.isPending || (organizations.length > 0 && !newDomain.orgId)}
                   className="flex-1 btn btn-primary"
                 >
                   {createMutation.isPending ? 'Adding...' : 'Add Domain'}

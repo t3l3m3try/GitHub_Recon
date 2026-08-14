@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { findingsAPI, domainAPI, Finding } from '../lib/api';
-import { ExternalLink, Check, X, Search, Filter, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { ExternalLink, Check, X, Search, Filter, Download, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import { getMacroCategory, MACRO_CATEGORIES, ALL_KNOWN_TYPES } from '../utils/macroCategories';
+import { useOrgFilter } from '../contexts/OrgFilterContext';
 
 // Badge styles per criticality — using inline styles to bypass all Tailwind/Vite caching issues
 const CRITICALITY_BADGE_STYLES: Record<string, React.CSSProperties> = {
@@ -47,6 +48,7 @@ const highlightText = (text: string, searchTerm: string) => {
 
 export default function Findings() {
   const queryClient = useQueryClient();
+  const { orgId, setOrgId, organizations } = useOrgFilter();
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
@@ -87,19 +89,29 @@ export default function Findings() {
     setFilters({ criticality: crit, type, domain, repository: repo, scanId, search, status });
     if (search) setSearchInput(search);
     setPage(1);
+
+    // A deep link from the Dashboard's per-organization breakdown carries
+    // ?orgId= — adopt it into the shared org switcher and drop it from the URL.
+    const urlOrgId = searchParams.get('orgId');
+    if (urlOrgId) {
+      setOrgId(urlOrgId);
+      const next = new URLSearchParams(searchParams);
+      next.delete('orgId');
+      setSearchParams(next, { replace: true });
+    }
   }, [searchParams]);
 
-  // Fetch domains for filter dropdown
+  // Fetch domains for filter dropdown, narrowed to the selected organization
   const { data: domainsData } = useQuery({
-    queryKey: ['domains'],
+    queryKey: ['domains', orgId],
     queryFn: async () => {
-      const response = await domainAPI.getAll();
+      const response = await domainAPI.getAll(orgId ? { orgId } : undefined);
       return response.data;
     },
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['findings', page, filters.criticality, filters.type, filters.domain, filters.search, filters.repository, filters.scanId, filters.status],
+    queryKey: ['findings', page, filters.criticality, filters.type, filters.domain, filters.search, filters.repository, filters.scanId, filters.status, orgId],
     queryFn: async () => {
       const params: any = { page, limit: 20 };
       if (filters.criticality) params.criticality = filters.criticality;
@@ -108,6 +120,7 @@ export default function Findings() {
       if (filters.search) params.search = filters.search;
       if (filters.repository) params.repository = filters.repository;
       if (filters.scanId) params.scanId = filters.scanId;
+      if (orgId) params.orgId = orgId;
       // Status filter → maps to verified / falsePositive boolean params
       if (filters.status === 'verified') { params.verified = 'true'; params.falsePositive = 'false'; }
       if (filters.status === 'false_positive') { params.falsePositive = 'true'; }
@@ -129,6 +142,7 @@ export default function Findings() {
       if (filters.search) params.search = filters.search;
       if (filters.repository) params.repository = filters.repository;
       if (filters.scanId) params.scanId = filters.scanId;
+      if (orgId) params.orgId = orgId;
       if (filters.status === 'verified') { params.verified = 'true'; params.falsePositive = 'false'; }
       if (filters.status === 'false_positive') { params.falsePositive = 'true'; }
       if (filters.status === 'unreviewed') { params.verified = 'false'; params.falsePositive = 'false'; }
@@ -151,7 +165,7 @@ export default function Findings() {
           return stringified;
         };
 
-        const headers = ['scanId', 'findingId', 'secretId', 'type', 'criticality', 'content', 'repository', 'repositoryUrl', 'fileUrl', 'commitDate', 'Status', 'score'];
+        const headers = ['organization', 'scanId', 'findingId', 'secretId', 'type', 'criticality', 'content', 'repository', 'repositoryUrl', 'fileUrl', 'commitDate', 'Status', 'score'];
         const csvRows = [headers.join(',')];
 
         for (const f of findings) {
@@ -161,6 +175,7 @@ export default function Findings() {
 
           for (const s of f.secrets || []) {
             const row = [
+              (f.scan?.domain as any)?.organization?.name || '',
               f.scanId,
               f.id,
               s.id,
@@ -301,7 +316,22 @@ export default function Findings() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${organizations.length > 0 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4 mb-4`}>
+          {organizations.length > 0 && (
+            <div>
+              <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Organization</label>
+              <select
+                className="input"
+                value={orgId}
+                onChange={(e) => { setOrgId(e.target.value); setPage(1); }}
+              >
+                <option value="">All Organizations</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider font-semibold">Criticality</label>
             <select
@@ -524,6 +554,15 @@ export default function Findings() {
                           style={{ border: '1px solid rgba(59,130,246,0.3)', backgroundColor: 'rgba(30,58,138,0.2)', color: '#93c5fd' }}
                         >
                           🌐 {finding.scan.domain.name}
+                        </span>
+                      )}
+                      {organizations.length > 0 && (finding.scan?.domain as any)?.organization?.name && (
+                        <span
+                          className="px-3 py-1 rounded-sm text-xs flex items-center gap-1"
+                          style={{ border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'rgba(76,29,149,0.15)', color: '#c4b5fd' }}
+                        >
+                          <Building2 className="w-3 h-3" />
+                          {(finding.scan!.domain as any).organization.name}
                         </span>
                       )}
                       <span className="text-sm font-bold" style={{ color: '#60A5FA' }}>

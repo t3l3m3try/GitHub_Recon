@@ -1,14 +1,76 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, AlertTriangle, Globe, Shield, ListChecks,
   ShieldCheck, ChevronDown, LogOut, KeyRound, Building2,
 } from 'lucide-react';
 import { useAuth, PERM } from '../contexts/AuthContext';
+import { useOrgFilter } from '../contexts/OrgFilterContext';
+
+function OrgSwitcher() {
+  const { orgId, setOrgId, organizations } = useOrgFilter();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = organizations.find(o => o.id === orgId);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 mt-0.5 transition-colors"
+      >
+        <Building2 className="w-3 h-3" />
+        <span>{selected ? selected.name : 'All Organizations'}</span>
+        <ChevronDown className="w-3 h-3" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 mt-1 w-56 z-50 rounded-lg border overflow-hidden max-h-72 overflow-y-auto"
+          style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+        >
+          <button
+            onClick={() => { setOrgId(''); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors"
+            style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <Globe className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-gray-300 font-medium">All Organizations</span>
+            {!orgId && <span className="ml-auto text-blue-400">✓</span>}
+          </button>
+          {organizations.map(org => (
+            <button
+              key={org.id}
+              onClick={() => { setOrgId(org.id); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-white/5 transition-colors"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+            >
+              <Building2 className="w-3.5 h-3.5 text-gray-500" />
+              <span className="text-gray-300 truncate">{org.name}</span>
+              {orgId === org.id && <span className="ml-auto text-blue-400">✓</span>}
+            </button>
+          ))}
+          {organizations.length === 0 && (
+            <div className="px-3 py-2 text-gray-500 text-xs">No organizations found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Layout() {
   const location = useLocation();
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, isSuperAdmin } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
@@ -54,7 +116,9 @@ export default function Layout() {
                 }}>
                   GITHUB RECON
                 </h1>
-                {user?.organization && (
+                {isSuperAdmin ? (
+                  <OrgSwitcher />
+                ) : user?.organization && (
                   <div className="flex items-center gap-1 text-[11px] text-gray-500 mt-0.5">
                     <Building2 className="w-3 h-3" />
                     <span>{user.organization.name}</span>
