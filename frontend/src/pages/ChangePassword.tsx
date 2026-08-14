@@ -11,7 +11,7 @@ import { KeyRound, Loader2, AlertTriangle, Check, Eye, EyeOff } from 'lucide-rea
  * blocked server-side until this completes, so a temporary password handed over
  * by an administrator cannot be used for anything else.
  */
-export default function ChangePassword({ forced = false }: { forced?: boolean }) {
+export default function ChangePassword({ forced = false, compact = false }: { forced?: boolean; compact?: boolean }) {
   const { user, refreshUser, logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -193,6 +193,10 @@ export default function ChangePassword({ forced = false }: { forced?: boolean })
       </button>
     </form>
   );
+
+  if (compact) {
+    return <div className="max-w-lg">{body}</div>;
+  }
 
   if (!forced) {
     return (
