@@ -4,6 +4,7 @@ import * as domainController from '../controllers/domain.controller';
 import * as scanController from '../controllers/scan.controller';
 import * as findingsController from '../controllers/findings.controller';
 import * as queriesController from '../controllers/queries.controller';
+import * as patternsController from '../controllers/patterns.controller';
 import * as authController from '../controllers/auth.controller';
 import * as adminController from '../controllers/admin.controller';
 import * as twoFactorController from '../controllers/twofactor.controller';
@@ -120,6 +121,9 @@ router.delete('/findings/:id', auth, requirePermission(PERMISSIONS.FINDING_DELET
 router.get('/queries', auth, requirePermission(PERMISSIONS.QUERY_READ), queriesController.getQueries);
 router.put('/queries', auth, requirePermission(PERMISSIONS.QUERY_WRITE), queriesController.updateQueries);
 router.post('/queries/reset', auth, requirePermission(PERMISSIONS.QUERY_WRITE), queriesController.resetQueries);
+
+// ── Detection patterns (read-only) ──────────────────────────────────────────
+router.get('/patterns', auth, requirePermission(PERMISSIONS.QUERY_READ), patternsController.getPatterns);
 
 // ── Administration ─────────────────────────────────────────────────────────
 router.get('/admin/meta', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.getMeta);

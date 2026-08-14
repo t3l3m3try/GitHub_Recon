@@ -301,6 +301,27 @@ export interface QueryStateUpdate {
   enabled: boolean;
 }
 
+export interface PatternEntry {
+  description: string;
+  /** Regex source, e.g. `pattern.source` — without the surrounding /…/ delimiters */
+  source: string;
+  flags: string;
+  entropyThreshold: number | null;
+  contextKeywords: string[];
+  exampleMatch: string | null;
+}
+
+export interface PatternGroup {
+  type: string;
+  count: number;
+  patterns: PatternEntry[];
+}
+
+export interface PatternCatalog {
+  groups: PatternGroup[];
+  total: number;
+}
+
 
 // API functions
 export const domainAPI = {
@@ -428,5 +449,9 @@ export const queriesAPI = {
     api.put<QueryCatalog>('/queries', { updates }, { params: domain ? { domain } : undefined }),
   reset: (domain?: string) =>
     api.post<QueryCatalog>('/queries/reset', {}, { params: domain ? { domain } : undefined }),
+};
+
+export const patternsAPI = {
+  getAll: () => api.get<PatternCatalog>('/patterns'),
 };
 

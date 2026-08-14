@@ -19,7 +19,10 @@ import {
   GitCommit,
   MessageSquare,
   Loader2,
+  Fingerprint,
+  ListFilter,
 } from 'lucide-react';
+import DetectionPatterns from './DetectionPatterns';
 
 /**
  * Queries — granular control over which GitHub searches every scan performs.
@@ -82,6 +85,7 @@ function TriCheckbox({
 export default function Queries() {
   const queryClient = useQueryClient();
 
+  const [tab, setTab] = useState<'queries' | 'patterns'>('queries');
   const [search, setSearch] = useState('');
   const [previewDomain, setPreviewDomain] = useState<string>('');
   const [collapsedTargets, setCollapsedTargets] = useState<Record<string, boolean>>({});
@@ -229,16 +233,32 @@ export default function Queries() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-400 animate-subtle-pulse">Loading queries...</div>
-      </div>
-    );
-  }
-
   const emptyTargets = (catalog?.targets ?? []).filter(
     (t) => (counts.perTarget[t.id]?.enabled ?? 0) === 0
+  );
+
+  const TabButton = ({
+    id,
+    icon: Icon,
+    label,
+  }: {
+    id: 'queries' | 'patterns';
+    icon: typeof ListFilter;
+    label: string;
+  }) => (
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-colors"
+      style={
+        tab === id
+          ? { background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.35)' }
+          : { background: 'transparent', color: '#9ca3af', border: '1px solid transparent' }
+      }
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
   );
 
   return (
@@ -248,17 +268,35 @@ export default function Queries() {
         <div>
           <h2 className="text-3xl font-bold mb-1 page-title">Queries</h2>
           <p className="text-gray-400 text-sm">
-            Control exactly which GitHub searches every scan performs.
+            {tab === 'queries'
+              ? 'Control exactly which GitHub searches every scan performs.'
+              : 'The regex patterns every scan uses to extract secrets from what those searches return. Read-only — these are intrinsic to the detection engine, not toggleable per scan.'}
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-blue-400">
-            {counts.enabled} <span className="text-gray-500 text-lg">/ {counts.total}</span>
+        {tab === 'queries' && (
+          <div className="text-right">
+            <div className="text-2xl font-bold text-blue-400">
+              {counts.enabled} <span className="text-gray-500 text-lg">/ {counts.total}</span>
+            </div>
+            <div className="text-xs text-gray-500 uppercase tracking-wider">Queries enabled</div>
           </div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Queries enabled</div>
-        </div>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-2 card !p-1.5 w-fit">
+        <TabButton id="queries" icon={ListFilter} label="Search Queries" />
+        <TabButton id="patterns" icon={Fingerprint} label="Detection Patterns" />
+      </div>
+
+      {tab === 'patterns' ? (
+        <DetectionPatterns />
+      ) : isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg text-gray-400 animate-subtle-pulse">Loading queries...</div>
+        </div>
+      ) : (
+        <>
       {/* Toolbar */}
       <div className="card">
         <div className="flex flex-wrap items-center gap-3">
@@ -515,6 +553,8 @@ export default function Queries() {
         <div className="text-red-400 text-sm">
           {(saveMutation.error as any)?.response?.data?.error || 'Failed to save query selection.'}
         </div>
+      )}
+        </>
       )}
     </div>
   );
