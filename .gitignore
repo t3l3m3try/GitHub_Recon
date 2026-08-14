@@ -39,6 +39,9 @@ Thumbs.db
 *.swo
 *~
 
+# Claude Code local tooling config
+.claude/
+
 # Testing
 coverage/
 .nyc_output/
