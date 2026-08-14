@@ -314,12 +314,72 @@ export interface PatternEntry {
 export interface PatternGroup {
   type: string;
   count: number;
+  /** Base contribution, out of criticalityModel.maxScore, to the 0-100 criticality score. */
+  severityWeight: number;
+  /** True when this type has no explicit weight and fell back to the default. */
+  isDefaultWeight: boolean;
   patterns: PatternEntry[];
+}
+
+export interface FalsePositiveFilters {
+  contentPatterns: { source: string; flags: string }[];
+  contextSubstrings: string[];
+}
+
+export interface DomainPattern {
+  type: string;
+  description: string;
+  template: string;
+  entropyThreshold: number;
+  contextKeywords: string[];
+}
+
+export interface CriticalityComponent {
+  key: string;
+  label: string;
+  maxPoints: number;
+  description: string;
+}
+
+export interface RecencyBracket {
+  maxDays: number | null;
+  score: number;
+  label: string;
+}
+
+export interface CriticalityThreshold {
+  min: number;
+  label: string;
+}
+
+export interface CriticalityModel {
+  maxScore: number;
+  components: CriticalityComponent[];
+  contextRules: {
+    criticalKeywords: string[];
+    criticalKeywordBonus: number;
+    highRiskKeywords: string[];
+    highRiskKeywordBonus: number;
+    commentPenalty: number;
+    envVarBonus: number;
+  };
+  recencyBrackets: RecencyBracket[];
+  recencyDefaultScore: number;
+  criticalityThresholds: CriticalityThreshold[];
+  fileAggregation: {
+    description: string;
+    highValueThreshold: number;
+    bonusPerAdditionalType: number;
+  };
 }
 
 export interface PatternCatalog {
   groups: PatternGroup[];
   total: number;
+  maxCriticalityScore: number;
+  falsePositiveFilters: FalsePositiveFilters;
+  domainPattern: DomainPattern;
+  criticalityModel: CriticalityModel;
 }
 
 

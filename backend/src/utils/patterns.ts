@@ -2866,7 +2866,7 @@ export function createPreview(content: string): string {
  * Refined: "test" only matches as part of test_key/test_token patterns,
  * NOT as generic substring (avoids filtering real secrets in test environments)
  */
-const FALSE_POSITIVE_PATTERNS = [
+export const FALSE_POSITIVE_PATTERNS = [
   /\bexample\b/i,
   /\bsample\b/i,
   /\bdemo\b/i,
@@ -2885,6 +2885,16 @@ const FALSE_POSITIVE_PATTERNS = [
   /TODO|FIXME|CHANGEME/i
 ];
 
+/** Substrings that, anywhere in the surrounding context, mark a match as a false positive. */
+export const FALSE_POSITIVE_CONTEXT_SUBSTRINGS = [
+  'placeholder',
+  'example.com',
+  'dummy',
+  'changeme',
+  'your_key_here',
+  'replace_this',
+];
+
 /**
  * Check if match is likely a false positive
  * More conservative: only checks the match itself and explicit context indicators
@@ -2897,14 +2907,7 @@ export function isFalsePositive(match: string, context: string): boolean {
 
   // Only check context for very explicit false positive indicators
   const contextLower = context.toLowerCase();
-  if (
-    contextLower.includes('placeholder') ||
-    contextLower.includes('example.com') ||
-    contextLower.includes('dummy') ||
-    contextLower.includes('changeme') ||
-    contextLower.includes('your_key_here') ||
-    contextLower.includes('replace_this')
-  ) {
+  if (FALSE_POSITIVE_CONTEXT_SUBSTRINGS.some(substr => contextLower.includes(substr))) {
     return true;
   }
 

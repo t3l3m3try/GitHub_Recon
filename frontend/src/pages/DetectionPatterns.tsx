@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { patternsAPI } from '../lib/api';
-import { Search, ChevronRight, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, ChevronsDownUp, ChevronsUpDown, ShieldAlert } from 'lucide-react';
 
 /**
  * Detection Patterns — read-only view of the regex patterns the scanner runs
- * against GitHub search results to extract secrets. This is a separate stage
- * from the search queries shown on the Search Queries tab: queries decide
- * what GitHub is asked for, these patterns decide what counts as a secret in
- * whatever comes back. Not user-configurable, so there's nothing to toggle.
+ * against GitHub search results to extract secrets, grouped by type. This is
+ * a separate stage from the search queries shown on the Search Queries tab:
+ * queries decide what GitHub is asked for, these patterns decide what counts
+ * as a secret in whatever comes back. Not user-configurable, so there's
+ * nothing to toggle. Everything that isn't tied to one specific pattern —
+ * the domain pattern, false-positive rules, criticality scoring — lives on
+ * the separate Detection Settings tab instead of repeating here.
  */
 
 export default function DetectionPatterns() {
@@ -39,6 +42,15 @@ export default function DetectionPatterns() {
       .filter((group) => group.patterns.length > 0);
   }, [catalog, term]);
 
+  const expandAll = () => {
+    if (!catalog) return;
+    const next: Record<string, boolean> = {};
+    for (const g of catalog.groups) next[g.type] = true;
+    setExpanded(next);
+  };
+
+  const collapseAll = () => setExpanded({});
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -47,7 +59,7 @@ export default function DetectionPatterns() {
     );
   }
 
-  if (isError) {
+  if (isError || !catalog) {
     return (
       <div className="card text-center py-12">
         <p className="text-gray-400">Failed to load detection patterns.</p>
@@ -67,9 +79,19 @@ export default function DetectionPatterns() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-blue-400">{catalog?.total ?? 0}</div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Detection patterns</div>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-secondary flex items-center gap-2" onClick={expandAll}>
+            <ChevronsUpDown className="w-4 h-4" />
+            <span>Expand all</span>
+          </button>
+          <button className="btn btn-secondary flex items-center gap-2" onClick={collapseAll}>
+            <ChevronsDownUp className="w-4 h-4" />
+            <span>Collapse all</span>
+          </button>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-blue-400">{catalog.total}</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wider whitespace-nowrap">Detection patterns</div>
+          </div>
         </div>
       </div>
 
@@ -93,7 +115,7 @@ export default function DetectionPatterns() {
                   {group.type.replace(/_/g, ' ')}
                 </div>
               </div>
-              <div className="text-sm font-bold text-gray-300 whitespace-nowrap">{group.count}</div>
+              <div className="text-sm font-bold text-gray-300 whitespace-nowrap w-8 text-right">{group.count}</div>
             </div>
 
             {isExpanded && (
@@ -115,19 +137,23 @@ export default function DetectionPatterns() {
                     >
                       /{p.source}/{p.flags}
                     </code>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-                      {p.entropyThreshold !== null && (
-                        <span>
-                          Entropy ≥ <span className="text-gray-400">{p.entropyThreshold}</span>
-                        </span>
-                      )}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                      <span className={p.entropyThreshold !== null ? 'text-gray-500' : 'text-gray-600 italic'}>
+                        {p.entropyThreshold !== null ? (
+                          <>
+                            Entropy ≥ <span className="text-gray-400 font-semibold">{p.entropyThreshold}</span>
+                          </>
+                        ) : (
+                          'No entropy filter'
+                        )}
+                      </span>
                       {p.exampleMatch && (
-                        <span className="truncate max-w-xs">
+                        <span className="text-gray-500 truncate max-w-xs">
                           Example: <span className="text-gray-400 font-mono">{p.exampleMatch}</span>
                         </span>
                       )}
                       {p.contextKeywords.length > 0 && (
-                        <span className="flex items-center gap-1 flex-wrap">
+                        <span className="flex items-center gap-1 flex-wrap" title="Informational only — not currently used to filter matches">
                           {p.contextKeywords.map((k) => (
                             <span
                               key={k}

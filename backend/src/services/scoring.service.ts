@@ -14,8 +14,11 @@ interface ScoringContext {
   entropy?: number;
 }
 
+/** Fallback weight for a secret type with no explicit entry below. */
+export const DEFAULT_TYPE_WEIGHT = 10;
+
 // Type weights (out of 40 points)
-const TYPE_WEIGHTS: Record<string, number> = {
+export const TYPE_WEIGHTS: Record<string, number> = {
   'AWS_SECRET_KEY': 40,
   'PRIVATE_KEY': 40,
   'CREDENTIAL_PAIR': 38, // email + password combination — always HIGH
@@ -302,16 +305,59 @@ const TYPE_WEIGHTS: Record<string, number> = {
   'ZENDESK_SECRET_KEY': 40,
 };
 
+/**
+ * Weight per scoring component, out of the 0-100 total (40 + 25 + 30 + 5 = 100).
+ * Single source of truth for both the calculation below and the UI's
+ * "Criticality Calculation" panel — see patterns.controller.ts.
+ */
+export const MAX_TYPE_SCORE = 40;
+export const MAX_ENTROPY_SCORE = 25;
+export const MAX_CONTEXT_SCORE = 30;
+export const MAX_RECENCY_SCORE = 5;
+export const MAX_CRITICALITY_SCORE = MAX_TYPE_SCORE + MAX_ENTROPY_SCORE + MAX_CONTEXT_SCORE + MAX_RECENCY_SCORE;
+
+/** Shannon entropy value that alone saturates the entropy component. */
+export const ENTROPY_SATURATION_VALUE = 5;
+
 // High-risk context keywords
-const CRITICAL_CONTEXT_KEYWORDS = [
+export const CRITICAL_CONTEXT_KEYWORDS = [
   'prod', 'production', 'live', 'master', 'main',
   'api', 'secret', 'private', 'credential', 'auth'
 ];
 
-const HIGH_RISK_CONTEXT_KEYWORDS = [
+export const HIGH_RISK_CONTEXT_KEYWORDS = [
   'staging', 'dev', 'development', 'test', 'beta',
   'key', 'token', 'password', 'config'
 ];
+
+export const CRITICAL_KEYWORD_BONUS = 20;
+export const HIGH_RISK_KEYWORD_BONUS = 12;
+export const COMMENT_CONTEXT_PENALTY = 5;
+export const ENV_VAR_CONTEXT_BONUS = 10;
+
+/** Commit-age brackets driving the recency component, checked in order. */
+export const RECENCY_BRACKETS: { maxDays: number | null; score: number; label: string }[] = [
+  { maxDays: 7, score: 5, label: 'Last week' },
+  { maxDays: 30, score: 4, label: 'Last month' },
+  { maxDays: 90, score: 3, label: 'Last quarter' },
+  { maxDays: 365, score: 2, label: 'Last year' },
+  { maxDays: null, score: 1, label: 'Older' },
+];
+/** Score used when no commit date is available at all. */
+export const RECENCY_DEFAULT_SCORE = 3;
+
+/** Score-to-criticality-label thresholds, highest first. */
+export const CRITICALITY_THRESHOLDS: { min: number; label: string }[] = [
+  { min: 90, label: 'CRITICAL' },
+  { min: 75, label: 'HIGH' },
+  { min: 50, label: 'MEDIUM' },
+  { min: 25, label: 'LOW' },
+  { min: 0, label: 'INFO' },
+];
+
+/** File-level aggregation: bonus per additional unique high-value secret type. */
+export const FILE_DENSITY_BONUS_PER_TYPE = 2;
+export const FILE_DENSITY_HIGH_VALUE_THRESHOLD = 75;
 
 /**
  * Calculate criticality score (0-100)
@@ -319,28 +365,28 @@ const HIGH_RISK_CONTEXT_KEYWORDS = [
 export function calculateCriticalityScore(context: ScoringContext): number {
   let score = 0;
 
-  // 1. Type-based score (40 points max)
-  score += TYPE_WEIGHTS[context.type] || 10;
+  // 1. Type-based score (MAX_TYPE_SCORE points max)
+  score += TYPE_WEIGHTS[context.type] || DEFAULT_TYPE_WEIGHT;
 
-  // 2. Entropy score (25 points max)
+  // 2. Entropy score (MAX_ENTROPY_SCORE points max)
   const entropy = context.entropy || calculateEntropy(context.content);
-  const entropyScore = Math.min(25, (entropy / 5) * 25);
+  const entropyScore = Math.min(MAX_ENTROPY_SCORE, (entropy / ENTROPY_SATURATION_VALUE) * MAX_ENTROPY_SCORE);
   score += entropyScore;
 
-  // 3. Context analysis (30 points max)
+  // 3. Context analysis (MAX_CONTEXT_SCORE points max)
   const contextScore = analyzeContext(context.context);
   score += contextScore;
 
-  // 4. Recency (5 points max)
+  // 4. Recency (MAX_RECENCY_SCORE points max)
   const recencyScore = analyzeRecency(context.commitDate);
   score += recencyScore;
 
   // Ensure score is between 0-100
-  return Math.min(100, Math.max(0, score));
+  return Math.min(MAX_CRITICALITY_SCORE, Math.max(0, score));
 }
 
 /**
- * Analyze context for risk indicators (0-30 points)
+ * Analyze context for risk indicators (0-MAX_CONTEXT_SCORE points)
  */
 function analyzeContext(context: string): number {
   if (!context) return 0;
@@ -348,56 +394,52 @@ function analyzeContext(context: string): number {
   const lowerContext = context.toLowerCase();
   let score = 0;
 
-  // Critical keywords (+20 points)
   const hasCriticalKeywords = CRITICAL_CONTEXT_KEYWORDS.some(
     keyword => lowerContext.includes(keyword)
   );
-  if (hasCriticalKeywords) score += 20;
+  if (hasCriticalKeywords) score += CRITICAL_KEYWORD_BONUS;
 
-  // High-risk keywords (+12 points)
   const hasHighRiskKeywords = HIGH_RISK_CONTEXT_KEYWORDS.some(
     keyword => lowerContext.includes(keyword)
   );
-  if (hasHighRiskKeywords) score += 12;
+  if (hasHighRiskKeywords) score += HIGH_RISK_KEYWORD_BONUS;
 
-  // Comments or documentation context (lower score by 5)
+  // Comments or documentation context
   if (lowerContext.includes('//') || lowerContext.includes('/*') ||
     lowerContext.includes('#') || lowerContext.includes('"""')) {
-    score -= 5;
+    score -= COMMENT_CONTEXT_PENALTY;
   }
 
-  // Environment variable pattern (+10 points)
+  // Environment variable pattern
   if (/export\s+\w+=/i.test(context) || /\w+\s*=\s*process\.env/i.test(context)) {
-    score += 10;
+    score += ENV_VAR_CONTEXT_BONUS;
   }
 
-  return Math.min(30, Math.max(0, score));
+  return Math.min(MAX_CONTEXT_SCORE, Math.max(0, score));
 }
 
 /**
- * Analyze commit recency (0-5 points)
+ * Analyze commit recency (0-MAX_RECENCY_SCORE points)
  */
 function analyzeRecency(commitDate?: Date): number {
-  if (!commitDate) return 3; // Default score
+  if (!commitDate) return RECENCY_DEFAULT_SCORE;
 
   const now = new Date();
   const daysDiff = (now.getTime() - commitDate.getTime()) / (1000 * 60 * 60 * 24);
 
-  if (daysDiff < 7) return 5;      // Last week
-  if (daysDiff < 30) return 4;     // Last month
-  if (daysDiff < 90) return 3;     // Last quarter
-  if (daysDiff < 365) return 2;    // Last year
-  return 1;                         // Older
+  for (const bracket of RECENCY_BRACKETS) {
+    if (bracket.maxDays === null || daysDiff < bracket.maxDays) return bracket.score;
+  }
+  return RECENCY_BRACKETS[RECENCY_BRACKETS.length - 1].score;
 }
 
 /**
  * Convert score to criticality level
  */
 export function scoreToCriticality(score: number): string {
-  if (score >= 90) return 'CRITICAL';
-  if (score >= 75) return 'HIGH';
-  if (score >= 50) return 'MEDIUM';
-  if (score >= 25) return 'LOW';
+  for (const t of CRITICALITY_THRESHOLDS) {
+    if (score >= t.min) return t.label;
+  }
   return 'INFO';
 }
 
@@ -422,24 +464,23 @@ export function calculateFileCriticalityScore(secrets: { type: string; score: nu
     }
   }
 
-  // Calculate density bonus based on variety of high-value secrets (e.g. ones with >= 75 criticalities)
+  // Calculate density bonus based on variety of high-value secrets
   let bonus = 0;
   const highValueTypesFound = new Set<string>();
 
   for (const s of secrets) {
-    // Treat any secret that scores >= 75 as high value
-    if (s.score >= 75) {
+    if (s.score >= FILE_DENSITY_HIGH_VALUE_THRESHOLD) {
       highValueTypesFound.add(s.type);
     }
   }
 
-  // If there's more than 1 unique high-value type, give +2 for each additional type
+  // If there's more than 1 unique high-value type, give a bonus for each additional type
   if (highValueTypesFound.size > 1) {
-    bonus = (highValueTypesFound.size - 1) * 2;
+    bonus = (highValueTypesFound.size - 1) * FILE_DENSITY_BONUS_PER_TYPE;
   }
 
   // Calculate final score
-  const finalScore = Math.min(100, Math.max(0, maxScore + bonus));
+  const finalScore = Math.min(MAX_CRITICALITY_SCORE, Math.max(0, maxScore + bonus));
   const criticality = scoreToCriticality(finalScore);
 
   return { score: finalScore, primaryType, criticality };

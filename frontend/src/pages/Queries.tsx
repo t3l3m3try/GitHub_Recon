@@ -21,8 +21,12 @@ import {
   Loader2,
   Fingerprint,
   ListFilter,
+  ChevronsUpDown,
+  ChevronsDownUp,
+  Settings2,
 } from 'lucide-react';
 import DetectionPatterns from './DetectionPatterns';
+import DetectionSettings from './DetectionSettings';
 
 /**
  * Queries — granular control over which GitHub searches every scan performs.
@@ -85,7 +89,7 @@ function TriCheckbox({
 export default function Queries() {
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<'queries' | 'patterns'>('queries');
+  const [tab, setTab] = useState<'queries' | 'patterns' | 'settings'>('queries');
   const [search, setSearch] = useState('');
   const [previewDomain, setPreviewDomain] = useState<string>('');
   const [collapsedTargets, setCollapsedTargets] = useState<Record<string, boolean>>({});
@@ -220,6 +224,24 @@ export default function Queries() {
     );
   };
 
+  const expandAllSections = () => {
+    const targets: Record<string, boolean> = {};
+    const areas: Record<string, boolean> = {};
+    for (const t of catalog?.targets ?? []) {
+      targets[t.id] = false;
+      for (const a of t.areas) areas[`${t.id}/${a.id}`] = true;
+    }
+    setCollapsedTargets(targets);
+    setExpandedAreas(areas);
+  };
+
+  const collapseAllSections = () => {
+    const targets: Record<string, boolean> = {};
+    for (const t of catalog?.targets ?? []) targets[t.id] = true;
+    setCollapsedTargets(targets);
+    setExpandedAreas({});
+  };
+
   const handleSave = () => {
     saveMutation.mutate(
       Object.entries(draft).map(([queryId, enabled]) => ({ queryId, enabled }))
@@ -237,12 +259,18 @@ export default function Queries() {
     (t) => (counts.perTarget[t.id]?.enabled ?? 0) === 0
   );
 
+  const TAB_DESCRIPTIONS: Record<'queries' | 'patterns' | 'settings', string> = {
+    queries: 'Control exactly which GitHub searches every scan performs.',
+    patterns: 'The regex patterns every scan uses to extract secrets from what those searches return. Read-only — these are intrinsic to the detection engine, not toggleable per scan.',
+    settings: 'Everything that shapes a finding but isn’t tied to one pattern — the always-on domain pattern, false-positive suppression, and the full criticality scoring model. Read-only.',
+  };
+
   const TabButton = ({
     id,
     icon: Icon,
     label,
   }: {
-    id: 'queries' | 'patterns';
+    id: 'queries' | 'patterns' | 'settings';
     icon: typeof ListFilter;
     label: string;
   }) => (
@@ -267,11 +295,7 @@ export default function Queries() {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-3xl font-bold mb-1 page-title">Queries</h2>
-          <p className="text-gray-400 text-sm">
-            {tab === 'queries'
-              ? 'Control exactly which GitHub searches every scan performs.'
-              : 'The regex patterns every scan uses to extract secrets from what those searches return. Read-only — these are intrinsic to the detection engine, not toggleable per scan.'}
-          </p>
+          <p className="text-gray-400 text-sm">{TAB_DESCRIPTIONS[tab]}</p>
         </div>
         {tab === 'queries' && (
           <div className="text-right">
@@ -287,10 +311,13 @@ export default function Queries() {
       <div className="flex items-center gap-2 card !p-1.5 w-fit">
         <TabButton id="queries" icon={ListFilter} label="Search Queries" />
         <TabButton id="patterns" icon={Fingerprint} label="Detection Patterns" />
+        <TabButton id="settings" icon={Settings2} label="Detection Settings" />
       </div>
 
       {tab === 'patterns' ? (
         <DetectionPatterns />
+      ) : tab === 'settings' ? (
+        <DetectionSettings />
       ) : isLoading ? (
         <div className="flex items-center justify-center h-64">
           <div className="text-lg text-gray-400 animate-subtle-pulse">Loading queries...</div>
@@ -329,6 +356,14 @@ export default function Queries() {
           </button>
           <button className="btn btn-secondary" onClick={() => setAll(false)}>
             Disable all
+          </button>
+          <button className="btn btn-secondary flex items-center gap-2" onClick={expandAllSections}>
+            <ChevronsUpDown className="w-4 h-4" />
+            <span>Expand all</span>
+          </button>
+          <button className="btn btn-secondary flex items-center gap-2" onClick={collapseAllSections}>
+            <ChevronsDownUp className="w-4 h-4" />
+            <span>Collapse all</span>
           </button>
           <button
             className="btn btn-secondary flex items-center space-x-2"
