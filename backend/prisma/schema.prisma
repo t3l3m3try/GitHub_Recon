@@ -54,7 +54,11 @@ model User {
 
   active             Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
-  lastLoginAt        DateTime?
+  /// False only for a freshly-seeded super admin awaiting first-run setup: the
+  /// stored hash is an unusable placeholder and login is refused until the
+  /// one-time setup screen sets a real password.
+  passwordSet Boolean @default(true)
+  lastLoginAt DateTime?
   /// Brute-force protection: cleared on any successful login
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?

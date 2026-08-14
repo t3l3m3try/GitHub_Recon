@@ -4,9 +4,11 @@ import {
   AUTH_CONSTANTS,
   audit,
   authenticate,
+  completeInitialSetup,
   findValidSession,
   generateStrongPassword,
   hashPassword,
+  isInitialSetupRequired,
   issueRefreshToken,
   revokeAllSessions,
   revokeSession,
@@ -76,6 +78,11 @@ export async function login(req: Request, res: Response) {
           return res.status(403).json({ error: 'This account has been deactivated', code: 'ACCOUNT_DISABLED' });
         case 'ORG_SUSPENDED':
           return res.status(403).json({ error: 'Your organization has been suspended', code: 'ORG_SUSPENDED' });
+        case 'SETUP_REQUIRED':
+          return res.status(409).json({
+            error: 'This installation has not been set up yet',
+            code: 'SETUP_REQUIRED',
+          });
         default:
           return res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
       }
@@ -292,4 +299,67 @@ export async function passwordPolicy(_req: Request, res: Response) {
     forbids: ['your username', 'your email address', 'common password phrases'],
     suggestion: generateStrongPassword(),
   });
+}
+
+/**
+ * GET /api/auth/setup-status
+ * Public. Lets the frontend show a first-run setup screen instead of login
+ * when the seeded super admin has no password yet.
+ */
+export async function setupStatus(_req: Request, res: Response) {
+  res.json({ required: await isInitialSetupRequired() });
+}
+
+/**
+ * POST /api/auth/setup
+ * Public, but only succeeds once: claims the pending super admin account by
+ * giving it a real password, then signs it in. Once setup has completed this
+ * always returns 409, so it can never be used to reset the account later —
+ * that's what /admin/users/:id/reset-password is for.
+ */
+export async function completeSetup(req: Request, res: Response) {
+  try {
+    const { password, confirmPassword } = req.body ?? {};
+    if (!password || !confirmPassword) {
+      return res.status(400).json({ error: 'Password and confirmation are required' });
+    }
+    if (String(password) !== String(confirmPassword)) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    const result = await completeInitialSetup(String(password));
+    if (!result.ok) {
+      if (result.reason === 'NOT_REQUIRED') {
+        return res.status(409).json({
+          error: 'Initial setup has already been completed',
+          code: 'SETUP_NOT_REQUIRED',
+        });
+      }
+      return res.status(400).json({ error: 'Password does not meet requirements', requirements: result.errors });
+    }
+
+    const { token: refreshToken } = await issueRefreshToken(result.user.id, {
+      userAgent: req.headers['user-agent'] as string,
+      ip: clientIp(req),
+    });
+    const accessToken = signAccessToken({
+      id: result.user.id,
+      role: result.user.role,
+      orgId: result.user.orgId,
+    });
+
+    await audit({
+      userId: result.user.id,
+      actorEmail: result.user.email,
+      action: 'auth.initial_setup',
+      ip: clientIp(req),
+    });
+    logger.info(`Initial setup completed: ${result.user.email}`);
+
+    res.cookie(REFRESH_COOKIE, refreshToken, cookieOptions());
+    res.json({ accessToken, user: result.user });
+  } catch (error: any) {
+    logger.error('Setup error:', error);
+    res.status(500).json({ error: 'Could not complete setup' });
+  }
 }

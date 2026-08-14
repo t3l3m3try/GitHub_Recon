@@ -281,9 +281,9 @@ export interface QueryStateUpdate {
 
 // API functions
 export const domainAPI = {
-  getAll: () => api.get<Domain[]>('/domains'),
+  getAll: (params?: any) => api.get<Domain[]>('/domains', { params }),
   getOne: (id: string) => api.get<Domain>(`/domains/${id}`),
-  create: (data: { name: string; scanFrequency?: string }) =>
+  create: (data: { name: string; scanFrequency?: string; orgId?: string }) =>
     api.post<Domain>('/domains', data),
   update: (id: string, data: Partial<Domain>) =>
     api.put<Domain>(`/domains/${id}`, data),
@@ -325,6 +325,9 @@ export const authAPI = {
     api.get<{ minLength: number; requires: string[]; forbids: string[]; suggestion: string }>(
       '/auth/password-policy'
     ),
+  setupStatus: () => api.get<{ required: boolean }>('/auth/setup-status'),
+  completeSetup: (password: string, confirmPassword: string) =>
+    api.post<{ accessToken: string; user: AuthUser }>('/auth/setup', { password, confirmPassword }),
 };
 
 export const adminAPI = {

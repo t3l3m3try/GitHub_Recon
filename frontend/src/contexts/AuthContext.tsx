@@ -27,7 +27,9 @@ import {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  setupRequired: boolean;
   login: (identifier: string, password: string) => Promise<void>;
+  completeSetup: (password: string, confirmPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   can: (permission: string) => boolean;
@@ -40,6 +42,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
   const queryClient = useQueryClient();
 
   const clearSession = useCallback(() => {
@@ -48,13 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
   }, [queryClient]);
 
-  // Restore the session on first load via the refresh cookie.
+  // Restore the session on first load via the refresh cookie, and check
+  // whether this is a fresh install still awaiting its one-time setup.
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      const token = await refreshAccessToken();
+      const [token, setupCheck] = await Promise.all([
+        refreshAccessToken(),
+        authAPI.setupStatus().catch(() => null),
+      ]);
       if (cancelled) return;
+
+      if (setupCheck) setSetupRequired(setupCheck.data.required);
 
       if (!token) {
         setLoading(false);
@@ -92,6 +101,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient]
   );
 
+  const completeSetup = useCallback(
+    async (password: string, confirmPassword: string) => {
+      const { data } = await authAPI.completeSetup(password, confirmPassword);
+      setAccessToken(data.accessToken);
+      queryClient.clear();
+      setSetupRequired(false);
+      setUser(data.user);
+    },
+    [queryClient]
+  );
+
   const logout = useCallback(async () => {
     try {
       await authAPI.logout();
@@ -110,7 +130,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
+      setupRequired,
       login,
+      completeSetup,
       logout,
       refreshUser,
       can: (permission: string) => Boolean(user?.permissions?.includes(permission)),
@@ -118,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions.some(p => Boolean(user?.permissions?.includes(p))),
       isSuperAdmin: user?.role === 'SUPER_ADMIN',
     }),
-    [user, loading, login, logout, refreshUser]
+    [user, loading, setupRequired, login, completeSetup, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

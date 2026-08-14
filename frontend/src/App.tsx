@@ -2,8 +2,10 @@ import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Setup from './pages/Setup';
 import ChangePassword from './pages/ChangePassword';
 import { AuthProvider, useAuth, PERM } from './contexts/AuthContext';
+import { OrgFilterProvider } from './contexts/OrgFilterContext';
 
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Findings = React.lazy(() => import('./pages/Findings'));
@@ -33,47 +35,51 @@ function RequirePermission({ permission, children }: { permission: string; child
 
 /**
  * Gates the whole application:
- *  - no session          → login screen
- *  - password change due → forced change screen (the API blocks everything else)
- *  - otherwise           → the app
+ *  - fresh install, no password set → one-time setup screen
+ *  - no session                     → login screen
+ *  - password change due            → forced change screen (the API blocks everything else)
+ *  - otherwise                      → the app
  */
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { user, loading, setupRequired } = useAuth();
 
   if (loading) return <Loading label="Restoring session..." />;
+  if (!user && setupRequired) return <Setup />;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword forced />;
 
   return (
-    <Suspense fallback={<Loading />}>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route
-            path="dashboard"
-            element={<RequirePermission permission={PERM.FINDING_READ}><Dashboard /></RequirePermission>}
-          />
-          <Route
-            path="findings"
-            element={<RequirePermission permission={PERM.FINDING_READ}><Findings /></RequirePermission>}
-          />
-          <Route
-            path="domains"
-            element={<RequirePermission permission={PERM.DOMAIN_READ}><Domains /></RequirePermission>}
-          />
-          <Route
-            path="queries"
-            element={<RequirePermission permission={PERM.QUERY_READ}><Queries /></RequirePermission>}
-          />
-          <Route
-            path="admin"
-            element={<RequirePermission permission={PERM.USER_MANAGE}><Admin /></RequirePermission>}
-          />
-          <Route path="account/password" element={<ChangePassword />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <OrgFilterProvider>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="dashboard"
+              element={<RequirePermission permission={PERM.FINDING_READ}><Dashboard /></RequirePermission>}
+            />
+            <Route
+              path="findings"
+              element={<RequirePermission permission={PERM.FINDING_READ}><Findings /></RequirePermission>}
+            />
+            <Route
+              path="domains"
+              element={<RequirePermission permission={PERM.DOMAIN_READ}><Domains /></RequirePermission>}
+            />
+            <Route
+              path="queries"
+              element={<RequirePermission permission={PERM.QUERY_READ}><Queries /></RequirePermission>}
+            />
+            <Route
+              path="admin"
+              element={<RequirePermission permission={PERM.USER_MANAGE}><Admin /></RequirePermission>}
+            />
+            <Route path="account/password" element={<ChangePassword />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </OrgFilterProvider>
   );
 }
 

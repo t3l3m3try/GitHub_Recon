@@ -227,7 +227,8 @@ export type LoginFailure =
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_LOCKED'
   | 'ACCOUNT_DISABLED'
-  | 'ORG_SUSPENDED';
+  | 'ORG_SUSPENDED'
+  | 'SETUP_REQUIRED';
 
 export interface LoginSuccess {
   ok: true;
@@ -266,6 +267,13 @@ export async function authenticate(identifier: string, password: string): Promis
     // Still spend the time a real comparison would, to avoid user enumeration.
     await bcrypt.compare(password || '', DUMMY_HASH);
     return { ok: false, reason: 'INVALID_CREDENTIALS' };
+  }
+
+  if (!user.passwordSet) {
+    // Freshly-seeded super admin: the stored hash is an unusable placeholder,
+    // so a real bcrypt comparison would only ever fail. Send the caller to the
+    // one-time setup screen instead of a generic invalid-credentials error.
+    return { ok: false, reason: 'SETUP_REQUIRED' };
   }
 
   if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
@@ -313,6 +321,76 @@ export async function authenticate(identifier: string, password: string): Promis
         ? { id: user.organization.id, name: user.organization.name, slug: user.organization.slug }
         : null,
       permissions: computeEffectivePermissions(user.role, user.permissions, user.organization),
+    },
+  };
+}
+
+// ── First-run setup ────────────────────────────────────────────────────────
+
+/**
+ * True while a freshly-seeded super admin is waiting for its password to be
+ * set. A fresh install has exactly one such account; it disappears the moment
+ * setup completes, so this can never re-trigger for later installs.
+ */
+export async function isInitialSetupRequired(): Promise<boolean> {
+  const pending = await prisma.user.findFirst({ where: { passwordSet: false } });
+  return !!pending;
+}
+
+export type SetupFailure = 'NOT_REQUIRED' | 'WEAK_PASSWORD';
+
+export interface SetupResult {
+  ok: true;
+  user: LoginSuccess['user'];
+}
+
+export interface SetupRejected {
+  ok: false;
+  reason: SetupFailure;
+  errors?: string[];
+}
+
+/**
+ * Claims the pending super admin account by giving it a real password. Fails
+ * once setup has already been completed, so the endpoint that calls this
+ * cannot be replayed to reset the account later.
+ */
+export async function completeInitialSetup(password: string): Promise<SetupResult | SetupRejected> {
+  const pending = await prisma.user.findFirst({
+    where: { passwordSet: false },
+    include: { organization: true },
+  });
+  if (!pending) return { ok: false, reason: 'NOT_REQUIRED' };
+
+  const check = validatePasswordStrength(password, pending.username, pending.email);
+  if (!check.valid) return { ok: false, reason: 'WEAK_PASSWORD', errors: check.errors };
+
+  const updated = await prisma.user.update({
+    where: { id: pending.id },
+    data: {
+      passwordHash: await hashPassword(password),
+      passwordSet: true,
+      mustChangePassword: false,
+      active: true,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    },
+    include: { organization: true },
+  });
+
+  return {
+    ok: true,
+    user: {
+      id: updated.id,
+      email: updated.email,
+      username: updated.username,
+      role: updated.role,
+      orgId: updated.orgId,
+      mustChangePassword: updated.mustChangePassword,
+      organization: updated.organization
+        ? { id: updated.organization.id, name: updated.organization.name, slug: updated.organization.slug }
+        : null,
+      permissions: computeEffectivePermissions(updated.role, updated.permissions, updated.organization),
     },
   };
 }

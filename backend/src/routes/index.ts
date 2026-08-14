@@ -58,6 +58,8 @@ router.get('/health', (req, res) => {
 router.post('/auth/login', loginLimiter, authController.login);
 router.post('/auth/refresh', refreshLimiter, authController.refresh);
 router.get('/auth/password-policy', authController.passwordPolicy);
+router.get('/auth/setup-status', authController.setupStatus);
+router.post('/auth/setup', loginLimiter, authController.completeSetup);
 
 // ── Auth (authenticated; exempt from the must-change-password block) ───────
 router.post('/auth/logout', authenticateToken, authController.logout);

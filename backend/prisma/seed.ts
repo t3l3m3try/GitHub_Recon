@@ -50,6 +50,7 @@ async function main() {
   console.log('\n🌱 Seeding access control...\n');
 
   const created: Credential[] = [];
+  let setupPending = false;
 
   // ── Super administrator ──────────────────────────────────────────────────
   let superAdmin = await prisma.user.findFirst({ where: { role: ROLES.SUPER_ADMIN } });
@@ -57,40 +58,60 @@ async function main() {
   if (superAdmin) {
     console.log(`   ✔ Super admin already exists: ${superAdmin.email} (password unchanged)`);
   } else {
-    // Allow an operator-supplied password, otherwise generate a strong one.
-    let password = process.env.SUPER_ADMIN_PASSWORD || '';
-    if (password) {
-      const check = validatePasswordStrength(password, SUPER_ADMIN_USERNAME, SUPER_ADMIN_EMAIL);
+    // An operator may still supply SUPER_ADMIN_PASSWORD for non-interactive
+    // installs; otherwise no password is generated or printed. The account is
+    // created without a usable password, and the first person to open the app
+    // is walked through a one-time setup screen to claim it.
+    const suppliedPassword = process.env.SUPER_ADMIN_PASSWORD || '';
+
+    if (suppliedPassword) {
+      const check = validatePasswordStrength(suppliedPassword, SUPER_ADMIN_USERNAME, SUPER_ADMIN_EMAIL);
       if (!check.valid) {
         throw new Error(`SUPER_ADMIN_PASSWORD does not meet the policy:\n  - ${check.errors.join('\n  - ')}`);
       }
+
+      superAdmin = await prisma.user.create({
+        data: {
+          email: SUPER_ADMIN_EMAIL,
+          username: SUPER_ADMIN_USERNAME,
+          passwordHash: await hashPassword(suppliedPassword),
+          passwordSet: true,
+          role: ROLES.SUPER_ADMIN,
+          orgId: null,
+          active: true,
+          // The password is known to whoever ran the seed, so it must be
+          // changed at first login before the account can be used for anything else.
+          mustChangePassword: true,
+        },
+      });
+
+      created.push({
+        label: 'SUPER ADMIN',
+        username: superAdmin.username,
+        email: superAdmin.email,
+        password: suppliedPassword,
+        role: superAdmin.role,
+        org: '—',
+      });
+      console.log(`   ✚ Super admin created: ${superAdmin.email}`);
     } else {
-      password = generateStrongPassword(24);
+      superAdmin = await prisma.user.create({
+        data: {
+          email: SUPER_ADMIN_EMAIL,
+          username: SUPER_ADMIN_USERNAME,
+          // Unusable placeholder — never revealed, never valid for login.
+          passwordHash: await hashPassword(generateStrongPassword(32)),
+          passwordSet: false,
+          role: ROLES.SUPER_ADMIN,
+          orgId: null,
+          active: true,
+          mustChangePassword: false,
+        },
+      });
+
+      setupPending = true;
+      console.log(`   ✚ Super admin created: ${superAdmin.email} — no password set yet`);
     }
-
-    superAdmin = await prisma.user.create({
-      data: {
-        email: SUPER_ADMIN_EMAIL,
-        username: SUPER_ADMIN_USERNAME,
-        passwordHash: await hashPassword(password),
-        role: ROLES.SUPER_ADMIN,
-        orgId: null,
-        active: true,
-        // The password is known to whoever runs the seed, so it must be changed
-        // at first login before the account can be used for anything else.
-        mustChangePassword: true,
-      },
-    });
-
-    created.push({
-      label: 'SUPER ADMIN',
-      username: superAdmin.username,
-      email: superAdmin.email,
-      password,
-      role: superAdmin.role,
-      org: '—',
-    });
-    console.log(`   ✚ Super admin created: ${superAdmin.email}`);
   }
 
   const slugify = (name: string) =>
@@ -174,6 +195,14 @@ async function main() {
     console.log('  Every account above must change its password at first login.');
     console.log('  Passwords are stored only as bcrypt hashes and cannot be recovered —');
     console.log('  use the Admin console to reset one if it is lost.');
+    console.log('='.repeat(78) + '\n');
+  } else if (setupPending) {
+    console.log('\n' + '='.repeat(78));
+    console.log('  FIRST-RUN SETUP REQUIRED — no super admin password has been set.');
+    console.log('='.repeat(78));
+    console.log(`\n  Open the app and sign in as "${SUPER_ADMIN_USERNAME}" to set the super`);
+    console.log('  admin password. Nothing is generated or printed — the account has no');
+    console.log('  usable password until that one-time setup screen is completed.');
     console.log('='.repeat(78) + '\n');
   } else {
     console.log('\n   No new accounts created; no credentials to display.\n');

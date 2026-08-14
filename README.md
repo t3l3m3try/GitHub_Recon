@@ -52,19 +52,11 @@ A multi-tenant platform for detecting sensitive information exposed in public Gi
    ```bash
    ./run-local.sh
    ```
-   This installs dependencies, sets up the database, seeds the first administrator and starts both servers.
+   This installs dependencies, sets up the database, seeds the first administrator account (with no password yet — see below) and starts both servers.
 
-4. **Save the credentials.** On its first run the seed prints a super administrator account with a randomly generated password:
+4. **Open** [http://localhost:5173](http://localhost:5173). No password is generated or printed anywhere: on a fresh install you land directly on a one-time **setup screen** that asks you to choose the super administrator's password. Enter one that satisfies the policy shown on screen and you're signed straight in — there is nothing to copy down beforehand, and the setup screen refuses to run again once it has been completed.
 
-   ```
-   ==============================================================================
-     CREDENTIALS — shown once. Copy them now, then change them at first login.
-   ==============================================================================
-   ```
-
-   This is the only time that password is displayed. It is stored as a bcrypt hash and cannot be recovered — if you lose it, you must reset it directly in the database.
-
-5. **Open** [http://localhost:5173](http://localhost:5173) and sign in. You will be required to set a new password before you can use the platform.
+   If you'd rather provision the account non-interactively (CI, scripted deploys), set `SUPER_ADMIN_PASSWORD` in `.env` before the first run instead — see [Configuration](#-configuration). In that case the seed prints the credentials once, and you're prompted to change that password at first login instead of seeing the setup screen.
 
 ## 👥 Organizations, Users and Permissions
 
@@ -99,7 +91,7 @@ Each organization has settings that act as a **ceiling** on its members — a us
 
 ### Getting started as an administrator
 
-1. Sign in as the super administrator and set a new password.
+1. Complete the one-time setup screen (or, if you provisioned `SUPER_ADMIN_PASSWORD` yourself, sign in and set a new password).
 2. Go to **Admin → Organizations → New Organization**.
 3. Go to **Admin → Users → New User**, pick a role and organization. A strong temporary password is generated and shown once — hand it to the user; they must change it at first sign-in.
 4. Adjust individual permissions from the shield icon on any user row.
@@ -130,7 +122,7 @@ All settings are read from `.env` in the project root, or `backend/.env`. Neithe
 | `NODE_ENV` | — | `development` | `production` enables Secure cookies and requires `JWT_SECRET` |
 | `SUPER_ADMIN_EMAIL` | — | `superadmin@localhost.local` | Email for the seeded administrator |
 | `SUPER_ADMIN_USERNAME` | — | `superadmin` | Username for the seeded administrator |
-| `SUPER_ADMIN_PASSWORD` | — | randomly generated | Supply your own; must satisfy the password policy |
+| `SUPER_ADMIN_PASSWORD` | — | none — set via the first-run setup screen | Optional: provision it non-interactively instead; must satisfy the password policy |
 | `SEED_ORGANIZATIONS` | — | none | Comma-separated organizations to create on first run |
 | `DEFAULT_ORGANIZATION` | — | `Default Organization` | Adopts domains that have no organization |
 | `AUTH_RATE_LIMIT_MAX` | — | `30` | Failed sign-ins allowed per IP per window |
@@ -144,11 +136,11 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 ## 📡 API
 
-All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/auth/refresh` and `/auth/password-policy` requires a valid access token, and each declares the permission it needs.
+All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/auth/refresh`, `/auth/password-policy`, `/auth/setup-status` and `/auth/setup` requires a valid access token, and each declares the permission it needs.
 
 | Area | Endpoints |
 |---|---|
-| **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `POST /auth/change-password` · `GET /auth/password-policy` |
+| **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `POST /auth/change-password` · `GET /auth/password-policy` · `GET /auth/setup-status` · `POST /auth/setup` |
 | **Domains** | `GET/POST /domains` · `GET/PUT/DELETE /domains/:id` |
 | **Scans** | `GET/POST /scans` · `GET /scans/:id` · `GET /scans/:id/findings` · `DELETE /scans/:id` |
 | **Findings** | `GET /findings` · `GET /findings/stats` · `GET /findings/export` · `GET/PUT/DELETE /findings/:id` · `POST /findings/bulk-update` |
@@ -164,7 +156,7 @@ npm run db:seed      # ensure a super administrator exists (idempotent)
 npm run db:studio    # browse the data
 ```
 
-The seed never overwrites an existing account and prints credentials only for accounts it has just created.
+The seed never overwrites an existing account. It only prints credentials when `SUPER_ADMIN_PASSWORD` was supplied; otherwise the newly created super admin has no password at all until the one-time setup screen sets one.
 
 ## 🤝 Contributing
 
