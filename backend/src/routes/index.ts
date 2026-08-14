@@ -6,9 +6,11 @@ import * as findingsController from '../controllers/findings.controller';
 import * as queriesController from '../controllers/queries.controller';
 import * as authController from '../controllers/auth.controller';
 import * as adminController from '../controllers/admin.controller';
+import * as twoFactorController from '../controllers/twofactor.controller';
 import {
   authenticateToken,
   blockIfPasswordChangeRequired,
+  blockIfTwoFactorSetupRequired,
   requirePermission,
   requireSuperAdmin,
 } from '../middleware/auth.middleware';
@@ -60,14 +62,36 @@ router.post('/auth/refresh', refreshLimiter, authController.refresh);
 router.get('/auth/password-policy', authController.passwordPolicy);
 router.get('/auth/setup-status', authController.setupStatus);
 router.post('/auth/setup', loginLimiter, authController.completeSetup);
+// Completes a login bounced to the 2FA challenge — no access token yet, so
+// this has to stay public. loginLimiter caps guessing the code just like it
+// caps guessing the password.
+router.post('/auth/2fa/verify', loginLimiter, authController.verifyTwoFactor);
 
 // ── Auth (authenticated; exempt from the must-change-password block) ───────
 router.post('/auth/logout', authenticateToken, authController.logout);
 router.get('/auth/me', authenticateToken, authController.me);
 router.post('/auth/change-password', authenticateToken, authController.changePassword);
 
-// Everything below additionally requires that no password change is pending.
-const auth = [authenticateToken, blockIfPasswordChangeRequired];
+// ── Auth (authenticated; self-service 2FA enrollment) ───────────────────────
+// Exempt from blockIfTwoFactorSetupRequired — this is where that requirement
+// gets satisfied — but a pending password change must still be resolved first.
+const selfServiceAuth = [authenticateToken, blockIfPasswordChangeRequired];
+router.get('/auth/2fa/status', selfServiceAuth, twoFactorController.status);
+router.post('/auth/2fa/setup', selfServiceAuth, loginLimiter, twoFactorController.setup);
+router.post('/auth/2fa/enable', selfServiceAuth, loginLimiter, twoFactorController.enable);
+router.post('/auth/2fa/disable', selfServiceAuth, loginLimiter, twoFactorController.disable);
+router.post(
+  '/auth/2fa/recovery-codes/regenerate',
+  selfServiceAuth, loginLimiter, twoFactorController.regenerateRecoveryCodes
+);
+
+// Everything below additionally requires that no password change, and no
+// mandated 2FA enrollment, is pending.
+const auth = [authenticateToken, blockIfPasswordChangeRequired, blockIfTwoFactorSetupRequired];
+
+// ── Account (self-service) ───────────────────────────────────────────────
+router.put('/auth/profile', auth, authController.updateProfile);
+router.get('/auth/permissions', auth, authController.myPermissions);
 
 // ── Domains ────────────────────────────────────────────────────────────────
 router.get('/domains', auth, requirePermission(PERMISSIONS.DOMAIN_READ), domainController.getDomains);
@@ -111,6 +135,8 @@ router.put('/admin/users/:id', auth, requirePermission(PERMISSIONS.USER_MANAGE),
 router.delete('/admin/users/:id', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.deleteUser);
 router.post('/admin/users/:id/reset-password', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.resetUserPassword);
 router.post('/admin/users/:id/unlock', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.unlockUser);
+router.post('/admin/users/:id/2fa/disable', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.disableTwoFactorForUser);
+router.post('/admin/users/:id/2fa/reset', auth, requirePermission(PERMISSIONS.USER_MANAGE), adminController.resetTwoFactorForUser);
 
 router.get('/admin/audit', auth, requireSuperAdmin, adminController.getAuditLog);
 

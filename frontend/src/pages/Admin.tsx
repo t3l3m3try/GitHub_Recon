@@ -11,6 +11,7 @@ import { useAuth, PERM } from '../contexts/AuthContext';
 import {
   Building2, Users, Plus, Trash2, Pencil, KeyRound, Unlock, Copy, Check,
   ShieldAlert, X, Loader2, AlertTriangle, ScrollText, Ban, CheckCircle2,
+  ShieldCheck, Smartphone, RotateCcw,
 } from 'lucide-react';
 
 /**
@@ -510,6 +511,18 @@ function UsersTab({
     onError,
   });
 
+  const disable2FAMutation = useMutation({
+    mutationFn: (id: string) => adminAPI.disableTwoFactor(id),
+    onSuccess: onChanged,
+    onError,
+  });
+
+  const reset2FAMutation = useMutation({
+    mutationFn: (id: string) => adminAPI.resetTwoFactor(id),
+    onSuccess: onChanged,
+    onError,
+  });
+
   if (loading) return <div className="text-gray-400 animate-subtle-pulse">Loading users...</div>;
 
   const visible = orgFilter === 'all'
@@ -543,7 +556,7 @@ function UsersTab({
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              {['User', 'Role', 'Organization', 'Status', 'Last sign-in', ''].map((h, i) => (
+              {['User', 'Role', 'Organization', 'Status', '2FA', 'Last sign-in', ''].map((h, i) => (
                 <th key={h + i} className="text-left px-4 py-3 text-[11px] text-gray-500 uppercase tracking-wider font-semibold whitespace-nowrap">
                   {h}
                 </th>
@@ -604,6 +617,26 @@ function UsersTab({
                       )}
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Toggle
+                        checked={u.twoFactorRequired}
+                        disabled={updateMutation.isPending}
+                        onChange={() => updateMutation.mutate({ id: u.id, data: { twoFactorRequired: !u.twoFactorRequired } })}
+                      />
+                      {u.twoFactorEnabled ? (
+                        <span className="text-[10px] text-emerald-400 flex items-center gap-1" title="Enrolled">
+                          <ShieldCheck className="w-3 h-3" /> on
+                        </span>
+                      ) : u.twoFactorRequired ? (
+                        <span className="text-[10px] text-amber-400 flex items-center gap-1" title="Required, not yet enrolled">
+                          <ShieldAlert className="w-3 h-3" /> pending
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-600">off</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}
                   </td>
@@ -616,6 +649,32 @@ function UsersTab({
                       >
                         <ShieldAlert className="w-3.5 h-3.5" />
                       </button>
+                      {u.twoFactorEnabled && (
+                        <button
+                          className="btn btn-secondary !px-2 !py-1"
+                          title="Reset 2FA (user must enroll again)"
+                          onClick={() => {
+                            if (confirm(`Reset two-factor authentication for ${u.username}? They will need to enroll again.`)) {
+                              reset2FAMutation.mutate(u.id);
+                            }
+                          }}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {(u.twoFactorEnabled || u.twoFactorRequired) && (
+                        <button
+                          className="btn btn-secondary !px-2 !py-1"
+                          title="Disable 2FA"
+                          onClick={() => {
+                            if (confirm(`Turn off two-factor authentication for ${u.username}, including any requirement?`)) {
+                              disable2FAMutation.mutate(u.id);
+                            }
+                          }}
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {locked && (
                         <button
                           className="btn btn-secondary !px-2 !py-1"
@@ -654,7 +713,7 @@ function UsersTab({
               );
             })}
             {visible.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No users match this filter.</td></tr>
+              <tr><td colSpan={7} className="text-center py-10 text-gray-400">No users match this filter.</td></tr>
             )}
           </tbody>
         </table>

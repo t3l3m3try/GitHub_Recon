@@ -19,6 +19,7 @@ const api = axios.create({
  */
 let accessToken: string | null = null;
 let onAuthLost: (() => void) | null = null;
+let onAccessGateTripped: (() => void) | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -30,6 +31,17 @@ export function getAccessToken(): string | null {
 
 export function setAuthLostHandler(handler: (() => void) | null) {
   onAuthLost = handler;
+}
+
+/**
+ * Fires when the API blocks a request because the account's own state
+ * changed underneath it — a password change or 2FA mandate was applied to
+ * this session, possibly by the user's own admin action on themselves. The
+ * in-memory user object won't know that yet, so the handler should re-fetch
+ * it and let routing react, rather than leaving the UI stuck on stale state.
+ */
+export function setAccessGateHandler(handler: (() => void) | null) {
+  onAccessGateTripped = handler;
 }
 
 api.interceptors.request.use((config) => {
@@ -81,6 +93,11 @@ api.interceptors.response.use(
       onAuthLost?.();
     }
 
+    const gateCode = error.response?.data?.code;
+    if (status === 403 && !isAuthCall && (gateCode === 'PASSWORD_CHANGE_REQUIRED' || gateCode === 'TWO_FACTOR_SETUP_REQUIRED')) {
+      onAccessGateTripped?.();
+    }
+
     return Promise.reject(error);
   }
 );
@@ -108,6 +125,9 @@ export interface AuthUser {
   permissions: string[];
   mustChangePassword: boolean;
   lastLoginAt?: string;
+  twoFactorEnabled: boolean;
+  /** Admin mandate outstanding: required, but not yet enrolled. */
+  twoFactorSetupRequired: boolean;
 }
 
 export interface Organization {
@@ -140,6 +160,9 @@ export interface ManagedUser {
   createdAt: string;
   overrides: { granted: string[]; revoked: string[] };
   effectivePermissions: string[];
+  twoFactorEnabled: boolean;
+  twoFactorRequired: boolean;
+  twoFactorEnabledAt?: string | null;
 }
 
 export interface AdminMeta {
@@ -311,9 +334,15 @@ export const findingsAPI = {
   getStats: (params?: any) => api.get<any>('/findings/stats', { params }),
 };
 
+export type LoginResponse =
+  | { twoFactorRequired: true; challengeToken: string }
+  | { twoFactorRequired?: undefined; accessToken: string; user: AuthUser };
+
 export const authAPI = {
   login: (identifier: string, password: string) =>
-    api.post<{ accessToken: string; user: AuthUser }>('/auth/login', { identifier, password }),
+    api.post<LoginResponse>('/auth/login', { identifier, password }),
+  verifyTwoFactor: (challengeToken: string, code: string) =>
+    api.post<{ accessToken: string; user: AuthUser }>('/auth/2fa/verify', { challengeToken, code }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get<AuthUser>('/auth/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
@@ -328,6 +357,27 @@ export const authAPI = {
   setupStatus: () => api.get<{ required: boolean }>('/auth/setup-status'),
   completeSetup: (password: string, confirmPassword: string) =>
     api.post<{ accessToken: string; user: AuthUser }>('/auth/setup', { password, confirmPassword }),
+  updateProfile: (data: Partial<{ username: string; email: string }>) =>
+    api.put<AuthUser>('/auth/profile', data),
+  myPermissions: () => api.get<{ groups: { name: string; permissions: { id: string; label: string }[] }[] }>('/auth/permissions'),
+};
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  required: boolean;
+  enabledAt: string | null;
+  unusedRecoveryCodes: number;
+}
+
+export const twoFactorAPI = {
+  status: () => api.get<TwoFactorStatus>('/auth/2fa/status'),
+  setup: () => api.post<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }>('/auth/2fa/setup'),
+  enable: (code: string) =>
+    api.post<{ message: string; recoveryCodes: string[] }>('/auth/2fa/enable', { code }),
+  disable: (password: string, code: string) =>
+    api.post<{ message: string }>('/auth/2fa/disable', { password, code }),
+  regenerateRecoveryCodes: (password: string, code: string) =>
+    api.post<{ recoveryCodes: string[] }>('/auth/2fa/recovery-codes/regenerate', { password, code }),
 };
 
 export const adminAPI = {
@@ -358,12 +408,15 @@ export const adminAPI = {
     active: boolean;
     granted: string[];
     revoked: string[];
+    twoFactorRequired: boolean;
   }>) => api.put<ManagedUser>(`/admin/users/${id}`, data),
   deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
   resetPassword: (id: string, password?: string) =>
     api.post<{ message: string; temporaryPassword: string }>(`/admin/users/${id}/reset-password`,
       password ? { password } : {}),
   unlockUser: (id: string) => api.post(`/admin/users/${id}/unlock`),
+  disableTwoFactor: (id: string) => api.post<{ message: string }>(`/admin/users/${id}/2fa/disable`),
+  resetTwoFactor: (id: string) => api.post<{ message: string }>(`/admin/users/${id}/2fa/reset`),
 
   getAuditLog: (limit = 100) => api.get<AuditEntry[]>('/admin/audit', { params: { limit } }),
 };

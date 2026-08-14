@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, AlertTriangle, Globe, Shield, ListChecks,
-  ShieldCheck, ChevronDown, LogOut, KeyRound, Building2,
+  ShieldCheck, ChevronDown, LogOut, Building2, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useAuth, PERM } from '../contexts/AuthContext';
 import { useOrgFilter } from '../contexts/OrgFilterContext';
@@ -187,12 +187,15 @@ export default function Layout() {
                       </div>
                     </div>
                     <Link
-                      to="/account/password"
+                      to="/account/settings"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors"
                     >
-                      <KeyRound className="w-4 h-4" />
-                      <span>Change password</span>
+                      <SettingsIcon className="w-4 h-4" />
+                      <span>Settings</span>
+                      {user?.twoFactorEnabled && (
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/70 ml-auto" />
+                      )}
                     </Link>
                     <button
                       onClick={() => { setMenuOpen(false); logout(); }}

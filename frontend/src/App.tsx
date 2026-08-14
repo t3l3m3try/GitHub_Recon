@@ -4,6 +4,8 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import ChangePassword from './pages/ChangePassword';
+import TwoFactor from './pages/TwoFactor';
+import Settings from './pages/Settings';
 import { AuthProvider, useAuth, PERM } from './contexts/AuthContext';
 import { OrgFilterProvider } from './contexts/OrgFilterContext';
 
@@ -38,6 +40,7 @@ function RequirePermission({ permission, children }: { permission: string; child
  *  - fresh install, no password set → one-time setup screen
  *  - no session                     → login screen
  *  - password change due            → forced change screen (the API blocks everything else)
+ *  - 2FA mandated but not enrolled  → forced enrollment screen (same)
  *  - otherwise                      → the app
  */
 function AppRoutes() {
@@ -47,6 +50,7 @@ function AppRoutes() {
   if (!user && setupRequired) return <Setup />;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword forced />;
+  if (user.twoFactorSetupRequired) return <TwoFactor forced />;
 
   return (
     <OrgFilterProvider>
@@ -74,7 +78,9 @@ function AppRoutes() {
               path="admin"
               element={<RequirePermission permission={PERM.USER_MANAGE}><Admin /></RequirePermission>}
             />
-            <Route path="account/password" element={<ChangePassword />} />
+            <Route path="account/settings" element={<Settings />} />
+            <Route path="account/password" element={<Navigate to="/account/settings" replace />} />
+            <Route path="account/security" element={<Navigate to="/account/settings?tab=security" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

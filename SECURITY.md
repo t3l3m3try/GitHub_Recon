@@ -23,7 +23,9 @@ Administrator-issued passwords are generated with a CSPRNG and displayed exactly
 
 **Brute-force protection** operates at two levels: an account locks for 15 minutes after 5 consecutive failures, and an IP-based limiter caps *failed* sign-ins per window. Successful sign-ins are not counted, so colleagues behind a shared address cannot lock each other out. Sign-in returns an identical message whether the account is unknown or the password is wrong, and performs a hash comparison in both cases so response timing does not reveal which accounts exist.
 
-**Audit trail.** Sign-ins, failures, password changes, and every organization and user modification are recorded with actor, action, target and IP.
+**Two-factor authentication (TOTP)** is optional per user and can be mandated per user by a super admin (any account) or an org admin (accounts in their own organization only) — the mandate forces enrollment before anything else works, but an admin can never enroll a device on someone else's behalf. The secret is AES-256-GCM encrypted at rest under a key separate from `JWT_SECRET`, and a used TOTP code is rejected if replayed even within its own 30-second window, not just after it expires. Ten single-use recovery codes are issued on enrollment, stored only as bcrypt hashes, and shown exactly once. Disabling 2FA or regenerating recovery codes requires both the current password and a current code — a stolen access token alone cannot strip this protection. A wrong code shares the same 5-attempts/15-minute lockout as a wrong password.
+
+**Audit trail.** Sign-ins, failures, password changes, 2FA enrollment/disable/reset, and every organization and user modification are recorded with actor, action, target and IP.
 
 ## Tenant isolation
 
@@ -59,7 +61,7 @@ If a token has been stored this way, rotate it — `.git/config` is easy to disc
 
 ## Deployment
 
-- Set `JWT_SECRET` to at least 32 random characters. The application refuses to start in production without it and never falls back to a built-in default.
+- Set `JWT_SECRET` and `TWO_FACTOR_ENCRYPTION_KEY` to at least 32 random characters each. The application refuses to start in production without either and never falls back to a built-in default.
 - Set `NODE_ENV=production` to enable `Secure` cookies.
 - Set `FRONTEND_URL` to your actual origin. Credentialed CORS cannot use a wildcard.
 - Terminate TLS in front of the application. Refresh cookies and access tokens are bearer credentials.
@@ -70,7 +72,7 @@ If a token has been stored this way, rotate it — `.git/config` is easy to disc
 
 The following are explicitly **not** covered:
 
-- **Multi-factor authentication** is not implemented.
+- **Only TOTP** is supported for 2FA — no WebAuthn/hardware security keys, and no SMS or email codes.
 - **Password history** is not retained; a user may reuse a previous password.
 - **The super administrator has no self-service recovery.** If the last super administrator password is lost, it must be reset directly against the database.
 - **SQLite** suits a single-node deployment. Concurrent multi-node writes require migrating to a networked database.

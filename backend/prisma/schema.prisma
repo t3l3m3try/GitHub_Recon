@@ -59,22 +59,55 @@ model User {
   /// one-time setup screen sets a real password.
   passwordSet Boolean @default(true)
   lastLoginAt DateTime?
-  /// Brute-force protection: cleared on any successful login
+  /// Brute-force protection: cleared on any successful login. Shared with 2FA
+  /// code attempts, so guessing a TOTP/recovery code locks the account the
+  /// same way guessing a password does.
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
+
+  /// AES-256-GCM ciphertext of the TOTP secret — set as soon as setup starts,
+  /// but only trusted for login once twoFactorEnabled is true. Never returned
+  /// to any client.
+  twoFactorSecret    String?
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorEnabledAt DateTime?
+  /// The 30-second time-step of the last accepted TOTP code. A code whose step
+  /// is not strictly greater than this is refused even if numerically correct,
+  /// so a captured code cannot be replayed within its own validity window.
+  twoFactorLastUsedStep Int?
+  /// Admin-set mandate: if true and twoFactorEnabled is false, the app forces
+  /// this user through 2FA enrollment before anything else. Distinct from
+  /// twoFactorEnabled because an admin can require 2FA without being able to
+  /// enroll a device on the user's behalf.
+  twoFactorRequired Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  domains       Domain[]
-  scans         Scan[]
-  sessions      Session[]
-  querySettings QuerySetting[]
+  domains            Domain[]
+  scans              Scan[]
+  sessions           Session[]
+  querySettings      QuerySetting[]
+  twoFactorRecoveryCodes TwoFactorRecoveryCode[]
 
   @@index([email])
   @@index([username])
   @@index([orgId])
   @@index([active])
+}
+
+/// One-time recovery codes issued when 2FA is enabled or regenerated. Only
+/// bcrypt hashes are stored, mirroring how passwords are handled — the
+/// plaintext is shown to the user exactly once.
+model TwoFactorRecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// One row per issued refresh token. Only the SHA-256 of the token is stored, so

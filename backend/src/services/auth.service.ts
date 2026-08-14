@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { authenticator } from 'otplib';
+import QRCode from 'qrcode';
+import { User as PrismaUser, Organization } from '@prisma/client';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { computeEffectivePermissions, Permission } from '../utils/permissions';
@@ -25,51 +28,71 @@ const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+const TWO_FACTOR_ISSUER = 'GitHub Recon';
+const TWO_FACTOR_CHALLENGE_TTL = '5m';
+const RECOVERY_CODE_COUNT = 10;
 
 /** Compared against when the account does not exist, to equalise login timing. */
 const DUMMY_HASH = bcrypt.hashSync('mismatch-placeholder-value', BCRYPT_ROUNDS);
 
 // ── Secrets ────────────────────────────────────────────────────────────────
 
-let cachedSecret: string | null = null;
-
 /**
- * The JWT signing secret. Refuses to fall back to a hard-coded default: in
- * production a missing secret is fatal, in development one is generated once
- * and persisted to backend/.env (which is git-ignored).
+ * Reads a secret from the environment, or — outside production — generates
+ * one and persists it to backend/.env (git-ignored) so it survives a restart.
+ * In production a missing secret is fatal rather than silently generated,
+ * since an ephemeral secret there would invalidate every token or ciphertext
+ * on each redeploy.
  */
-export function getJwtSecret(): string {
-  if (cachedSecret) return cachedSecret;
-
-  const fromEnv = process.env.JWT_SECRET;
-  if (fromEnv && fromEnv.length >= 32) {
-    cachedSecret = fromEnv;
-    return cachedSecret;
-  }
+function getOrCreatePersistedSecret(envVar: string): string {
+  const fromEnv = process.env[envVar];
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
 
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set to a value of at least 32 characters in production');
+    throw new Error(`${envVar} must be set to a value of at least 32 characters in production`);
   }
 
   const generated = crypto.randomBytes(48).toString('base64url');
   const envPath = path.resolve(__dirname, '../../.env');
   try {
     const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-    if (!/^JWT_SECRET=/m.test(existing)) {
+    if (!new RegExp(`^${envVar}=`, 'm').test(existing)) {
       fs.writeFileSync(
         envPath,
-        `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}JWT_SECRET=${generated}\n`,
+        `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}${envVar}=${generated}\n`,
         { mode: 0o600 }
       );
-      logger.warn(`No JWT_SECRET found — generated one and wrote it to ${envPath}`);
+      logger.warn(`No ${envVar} found — generated one and wrote it to ${envPath}`);
     }
   } catch (error) {
-    logger.warn('Could not persist generated JWT_SECRET; tokens will not survive a restart');
+    logger.warn(`Could not persist generated ${envVar}; it will not survive a restart`);
   }
 
-  process.env.JWT_SECRET = generated;
-  cachedSecret = generated;
+  process.env[envVar] = generated;
+  return generated;
+}
+
+let cachedSecret: string | null = null;
+
+/** The JWT signing secret for access tokens and 2FA challenge tokens. */
+export function getJwtSecret(): string {
+  if (!cachedSecret) cachedSecret = getOrCreatePersistedSecret('JWT_SECRET');
   return cachedSecret;
+}
+
+let cachedEncryptionKey: Buffer | null = null;
+
+/**
+ * The key used to encrypt TOTP secrets at rest. Deliberately separate from
+ * JWT_SECRET so that rotating one does not also invalidate the other; any
+ * length of source material is normalised to a 32-byte AES-256 key.
+ */
+function getTwoFactorEncryptionKey(): Buffer {
+  if (!cachedEncryptionKey) {
+    const raw = getOrCreatePersistedSecret('TWO_FACTOR_ENCRYPTION_KEY');
+    cachedEncryptionKey = crypto.createHash('sha256').update(raw).digest();
+  }
+  return cachedEncryptionKey;
 }
 
 // ── Passwords ──────────────────────────────────────────────────────────────
@@ -241,6 +264,9 @@ export interface LoginSuccess {
     mustChangePassword: boolean;
     organization: { id: string; name: string; slug: string } | null;
     permissions: Permission[];
+    twoFactorEnabled: boolean;
+    /** True when an admin mandate is outstanding: required, but not yet enrolled. */
+    twoFactorSetupRequired: boolean;
   };
 }
 
@@ -250,10 +276,32 @@ export interface LoginRejected {
   retryAfterMinutes?: number;
 }
 
+/** Shape returned by every successful-auth path (password login, 2FA verify, initial setup). */
+type PresentableUser = PrismaUser & { organization: Organization | null };
+
+function presentAuthUser(user: PresentableUser): LoginSuccess['user'] {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    role: user.role,
+    orgId: user.orgId,
+    mustChangePassword: user.mustChangePassword,
+    organization: user.organization
+      ? { id: user.organization.id, name: user.organization.name, slug: user.organization.slug }
+      : null,
+    permissions: computeEffectivePermissions(user.role, user.permissions, user.organization),
+    twoFactorEnabled: user.twoFactorEnabled,
+    twoFactorSetupRequired: user.twoFactorRequired && !user.twoFactorEnabled,
+  };
+}
+
 /**
  * Verify credentials. Accepts either the email address or the username as the
  * identifier. Every rejection returns the same generic reason except for the
  * states the user genuinely needs to act on (locked / disabled / suspended).
+ * Only checks the password — the caller is responsible for the 2FA step when
+ * user.twoFactorEnabled is true.
  */
 export async function authenticate(identifier: string, password: string): Promise<LoginSuccess | LoginRejected> {
   const id = (identifier || '').trim().toLowerCase();
@@ -303,26 +351,19 @@ export async function authenticate(identifier: string, password: string): Promis
   if (!user.active) return { ok: false, reason: 'ACCOUNT_DISABLED' };
   if (user.organization && !user.organization.active) return { ok: false, reason: 'ORG_SUSPENDED' };
 
+  // The password factor is proven, so it's safe to clear the lockout counter
+  // even when a second factor is still outstanding — the 2FA step reuses the
+  // same counter from zero. lastLoginAt only records a *complete* sign-in.
   await prisma.user.update({
     where: { id: user.id },
-    data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
+    data: {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      ...(user.twoFactorEnabled ? {} : { lastLoginAt: new Date() }),
+    },
   });
 
-  return {
-    ok: true,
-    user: {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      role: user.role,
-      orgId: user.orgId,
-      mustChangePassword: user.mustChangePassword,
-      organization: user.organization
-        ? { id: user.organization.id, name: user.organization.name, slug: user.organization.slug }
-        : null,
-      permissions: computeEffectivePermissions(user.role, user.permissions, user.organization),
-    },
-  };
+  return { ok: true, user: presentAuthUser(user) };
 }
 
 // ── First-run setup ────────────────────────────────────────────────────────
@@ -378,21 +419,196 @@ export async function completeInitialSetup(password: string): Promise<SetupResul
     include: { organization: true },
   });
 
-  return {
-    ok: true,
-    user: {
-      id: updated.id,
-      email: updated.email,
-      username: updated.username,
-      role: updated.role,
-      orgId: updated.orgId,
-      mustChangePassword: updated.mustChangePassword,
-      organization: updated.organization
-        ? { id: updated.organization.id, name: updated.organization.name, slug: updated.organization.slug }
-        : null,
-      permissions: computeEffectivePermissions(updated.role, updated.permissions, updated.organization),
-    },
-  };
+  return { ok: true, user: presentAuthUser(updated) };
+}
+
+// ── Two-factor authentication ─────────────────────────────────────────────
+
+/** AES-256-GCM: iv, auth tag and ciphertext are stored together, base64-joined. */
+export function encryptSecret(plain: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getTwoFactorEncryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, ciphertext].map(b => b.toString('base64')).join('.');
+}
+
+export function decryptSecret(payload: string): string {
+  const [ivB64, tagB64, dataB64] = payload.split('.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', getTwoFactorEncryptionKey(), Buffer.from(ivB64, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
+}
+
+/** A fresh base32 TOTP secret, compatible with Google Authenticator, Authy, etc. */
+export function generateTwoFactorSecret(): string {
+  return authenticator.generateSecret();
+}
+
+/** The otpauth:// URI an authenticator app scans to enroll the account. */
+export function buildOtpAuthUrl(secret: string, accountLabel: string): string {
+  return authenticator.keyuri(accountLabel, TWO_FACTOR_ISSUER, secret);
+}
+
+export async function generateQrCodeDataUrl(otpauthUrl: string): Promise<string> {
+  return QRCode.toDataURL(otpauthUrl);
+}
+
+const TOTP_STEP_SECONDS = 30;
+
+/**
+ * Checks a 6-digit code against the secret and, only if it is both correct
+ * and newer than the last accepted code, marks that time-step consumed.
+ * ±1 step of tolerance covers clock drift between server and device; the
+ * consumption check on top of that stops the same code being replayed
+ * anywhere inside its own 30-second validity window.
+ */
+async function verifyAndConsumeTotpCode(userId: string, secret: string, code: string): Promise<boolean> {
+  authenticator.options = { window: 1 };
+  let delta: number | null;
+  try {
+    delta = authenticator.checkDelta(String(code || '').trim(), secret);
+  } catch {
+    delta = null;
+  }
+  if (delta === null || delta === undefined) return false;
+
+  const step = Math.floor(Date.now() / 1000 / TOTP_STEP_SECONDS) + delta;
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { twoFactorLastUsedStep: true } });
+  if (user?.twoFactorLastUsedStep != null && step <= user.twoFactorLastUsedStep) return false;
+
+  await prisma.user.update({ where: { id: userId }, data: { twoFactorLastUsedStep: step } });
+  return true;
+}
+
+/** Ten single-use codes, formatted like AB12C-3D4E5 for easy transcription. */
+export function generateRecoveryCodes(count = RECOVERY_CODE_COUNT): string[] {
+  return Array.from({ length: count }, () => {
+    const raw = crypto.randomBytes(5).toString('hex').toUpperCase();
+    return `${raw.slice(0, 5)}-${raw.slice(5, 10)}`;
+  });
+}
+
+export async function hashRecoveryCode(code: string): Promise<string> {
+  return hashPassword(code.trim().toUpperCase());
+}
+
+/**
+ * Verifies a 6-digit TOTP code or a recovery code and, on success, consumes
+ * it — a TOTP code stops working the instant it's accepted (not just after
+ * its time window expires), and a recovery code stops working after one use.
+ */
+export async function verifyAndConsumeTwoFactorCode(
+  userId: string,
+  encryptedSecret: string,
+  code: string
+): Promise<'totp' | 'recovery' | null> {
+  const cleanCode = String(code || '').trim();
+
+  if (/^\d{6}$/.test(cleanCode)) {
+    const ok = await verifyAndConsumeTotpCode(userId, decryptSecret(encryptedSecret), cleanCode);
+    return ok ? 'totp' : null;
+  }
+
+  const unused = await prisma.twoFactorRecoveryCode.findMany({ where: { userId, usedAt: null } });
+  for (const candidate of unused) {
+    if (await verifyPassword(cleanCode.toUpperCase(), candidate.codeHash)) {
+      await prisma.twoFactorRecoveryCode.update({ where: { id: candidate.id }, data: { usedAt: new Date() } });
+      return 'recovery';
+    }
+  }
+  return null;
+}
+
+interface TwoFactorChallengePayload {
+  sub: string;
+  purpose: '2fa_challenge';
+}
+
+/** Short-lived token proving the password step passed; only usable at /auth/2fa/verify. */
+export function signTwoFactorChallenge(userId: string): string {
+  return jwt.sign(
+    { sub: userId, purpose: '2fa_challenge' } satisfies TwoFactorChallengePayload,
+    getJwtSecret(),
+    { expiresIn: TWO_FACTOR_CHALLENGE_TTL }
+  );
+}
+
+function verifyTwoFactorChallenge(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, getJwtSecret()) as Partial<TwoFactorChallengePayload>;
+    if (payload.purpose !== '2fa_challenge' || !payload.sub) return null;
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
+
+export type TwoFactorVerifyFailure =
+  | 'INVALID_TOKEN'
+  | 'INVALID_CODE'
+  | 'ACCOUNT_LOCKED'
+  | 'ACCOUNT_DISABLED'
+  | 'ORG_SUSPENDED';
+
+export interface TwoFactorVerifyRejected {
+  ok: false;
+  reason: TwoFactorVerifyFailure;
+  retryAfterMinutes?: number;
+}
+
+/**
+ * Completes a login that was bounced to the 2FA challenge. Accepts either a
+ * 6-digit TOTP code or a recovery code, and shares the same lockout counter
+ * as the password step, so guessing either one locks the account.
+ */
+export async function verifyTwoFactorLogin(
+  challengeToken: string,
+  code: string
+): Promise<LoginSuccess | TwoFactorVerifyRejected> {
+  const userId = verifyTwoFactorChallenge(challengeToken);
+  if (!userId) return { ok: false, reason: 'INVALID_TOKEN' };
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { organization: true } });
+  if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) return { ok: false, reason: 'INVALID_TOKEN' };
+
+  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+    const retryAfterMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    return { ok: false, reason: 'ACCOUNT_LOCKED', retryAfterMinutes };
+  }
+
+  const kind = await verifyAndConsumeTwoFactorCode(user.id, user.twoFactorSecret, code);
+
+  if (!kind) {
+    const attempts = user.failedLoginAttempts + 1;
+    const lock = attempts >= MAX_FAILED_ATTEMPTS;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: lock ? 0 : attempts,
+        lockedUntil: lock ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) : null,
+      },
+    });
+    if (lock) {
+      logger.warn(`Account locked after ${MAX_FAILED_ATTEMPTS} failed 2FA attempts: ${user.email}`);
+      return { ok: false, reason: 'ACCOUNT_LOCKED', retryAfterMinutes: LOCKOUT_MINUTES };
+    }
+    return { ok: false, reason: 'INVALID_CODE' };
+  }
+
+  if (!user.active) return { ok: false, reason: 'ACCOUNT_DISABLED' };
+  if (user.organization && !user.organization.active) return { ok: false, reason: 'ORG_SUSPENDED' };
+
+  if (kind === 'recovery') logger.info(`Recovery code consumed at login: ${user.email}`);
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
+    include: { organization: true },
+  });
+
+  return { ok: true, user: presentAuthUser(updated) };
 }
 
 // ── Audit ──────────────────────────────────────────────────────────────────

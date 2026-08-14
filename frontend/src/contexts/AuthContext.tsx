@@ -12,6 +12,7 @@ import {
   AuthUser,
   authAPI,
   refreshAccessToken,
+  setAccessGateHandler,
   setAccessToken,
   setAuthLostHandler,
 } from '../lib/api';
@@ -24,11 +25,15 @@ import {
  * long-lived credential ever being readable by scripts.
  */
 
+/** Either the session is live, or the password checked out and a 2FA code is still needed. */
+export type LoginOutcome = { twoFactorRequired: false } | { twoFactorRequired: true; challengeToken: string };
+
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   setupRequired: boolean;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<LoginOutcome>;
+  verifyTwoFactor: (challengeToken: string, code: string) => Promise<void>;
   completeSetup: (password: string, confirmPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -92,8 +97,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const login = useCallback(
-    async (identifier: string, password: string) => {
+    async (identifier: string, password: string): Promise<LoginOutcome> => {
       const { data } = await authAPI.login(identifier, password);
+      if (data.twoFactorRequired) {
+        return { twoFactorRequired: true, challengeToken: data.challengeToken };
+      }
+      setAccessToken(data.accessToken);
+      queryClient.clear();
+      setUser(data.user);
+      return { twoFactorRequired: false };
+    },
+    [queryClient]
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (challengeToken: string, code: string) => {
+      const { data } = await authAPI.verifyTwoFactor(challengeToken, code);
       setAccessToken(data.accessToken);
       queryClient.clear();
       setUser(data.user);
@@ -126,12 +145,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data);
   }, []);
 
+  // The API blocked a request because this account's own state changed mid-
+  // session (e.g. an admin mandated 2FA on the account the user is signed in
+  // as, including their own). Re-fetching /me picks up the new flags so
+  // AppRoutes can redirect into the right forced screen instead of the UI
+  // being stuck re-issuing requests that keep 403ing.
+  useEffect(() => {
+    setAccessGateHandler(() => { refreshUser().catch(() => clearSession()); });
+    return () => setAccessGateHandler(null);
+  }, [refreshUser, clearSession]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
       setupRequired,
       login,
+      verifyTwoFactor,
       completeSetup,
       logout,
       refreshUser,
@@ -140,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions.some(p => Boolean(user?.permissions?.includes(p))),
       isSuperAdmin: user?.role === 'SUPER_ADMIN',
     }),
-    [user, loading, setupRequired, login, completeSetup, logout, refreshUser]
+    [user, loading, setupRequired, login, verifyTwoFactor, completeSetup, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

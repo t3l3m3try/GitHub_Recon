@@ -13,6 +13,7 @@ A multi-tenant platform for detecting sensitive information exposed in public Gi
 - **Multi-tenancy** — organizations keep their data separate. Members see their own organization's domains and findings and nothing else.
 - **Role-based access control** — four roles plus per-user permission overrides, all administered from the UI.
 - **Secure authentication** — bcrypt password hashing, short-lived access tokens, rotating refresh tokens in httpOnly cookies, account lockout and an audit trail. See [SECURITY.md](SECURITY.md).
+- **Two-factor authentication (TOTP)** — any user can add it from their account settings; super admins can mandate, disable or reset it for anyone, org admins for their own organization's users.
 - **SOC-style dashboard** — dark-mode analytics, triage and reporting.
 
 ## 🛠️ Tech Stack
@@ -89,6 +90,20 @@ Each organization has settings that act as a **ceiling** on its members — a us
 | `maxDomains` | Maximum domains the organization may monitor |
 | `maxUsers` | Maximum member accounts |
 
+### Two-factor authentication
+
+Any user can turn on TOTP-based 2FA from **account menu → Settings → Security** — scan the QR code with an authenticator app (Google Authenticator, Authy, 1Password, etc.), confirm one code, and save the ten recovery codes shown once. From then on, signing in asks for a code after the password.
+
+Admins manage 2FA for other accounts from **Admin → Users**: super admins for anyone, org admins for users in their own organization only.
+
+| Action | Effect |
+|---|---|
+| **Require** (toggle) | Mandates 2FA — the user is walked through enrollment before they can use anything else. An admin can never enroll a device on someone else's behalf; this only sets the requirement. |
+| **Disable** | Turns 2FA off entirely, including any requirement. |
+| **Reset** | Clears a lost-device enrollment. If 2FA was required, it still is — the user enrolls again on next sign-in. |
+
+Turning off 2FA or regenerating recovery codes always needs both the current password and a current code, even for the account's own owner — a stolen session token alone is never enough.
+
 ### Getting started as an administrator
 
 1. Complete the one-time setup screen (or, if you provisioned `SUPER_ADMIN_PASSWORD` yourself, sign in and set a new password).
@@ -116,6 +131,7 @@ All settings are read from `.env` in the project root, or `backend/.env`. Neithe
 |---|---|---|---|
 | `GITHUB_TOKEN` | **yes** | — | GitHub PAT used for all searches |
 | `JWT_SECRET` | in production | auto-generated in dev | Signing key for access tokens; minimum 32 characters |
+| `TWO_FACTOR_ENCRYPTION_KEY` | in production | auto-generated in dev | Encrypts 2FA secrets at rest; minimum 32 characters |
 | `DATABASE_URL` | — | `file:./dev.db` | Prisma connection string |
 | `PORT` | — | `3001` | Backend port |
 | `FRONTEND_URL` | — | `http://localhost:5173` | Allowed CORS origin (credentials mode forbids a wildcard) |
@@ -136,16 +152,17 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 ## 📡 API
 
-All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/auth/refresh`, `/auth/password-policy`, `/auth/setup-status` and `/auth/setup` requires a valid access token, and each declares the permission it needs.
+All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/auth/refresh`, `/auth/password-policy`, `/auth/setup-status`, `/auth/setup` and `/auth/2fa/verify` requires a valid access token, and each declares the permission it needs.
 
 | Area | Endpoints |
 |---|---|
-| **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `POST /auth/change-password` · `GET /auth/password-policy` · `GET /auth/setup-status` · `POST /auth/setup` |
+| **Auth** | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `PUT /auth/profile` · `GET /auth/permissions` · `POST /auth/change-password` · `GET /auth/password-policy` · `GET /auth/setup-status` · `POST /auth/setup` |
+| **Two-factor (self-service)** | `GET /auth/2fa/status` · `POST /auth/2fa/setup` · `POST /auth/2fa/enable` · `POST /auth/2fa/disable` · `POST /auth/2fa/recovery-codes/regenerate` · `POST /auth/2fa/verify` |
 | **Domains** | `GET/POST /domains` · `GET/PUT/DELETE /domains/:id` |
 | **Scans** | `GET/POST /scans` · `GET /scans/:id` · `GET /scans/:id/findings` · `DELETE /scans/:id` |
 | **Findings** | `GET /findings` · `GET /findings/stats` · `GET /findings/export` · `GET/PUT/DELETE /findings/:id` · `POST /findings/bulk-update` |
 | **Queries** | `GET/PUT /queries` · `POST /queries/reset` |
-| **Admin** | `GET /admin/meta` · `GET/POST /admin/organizations` · `PUT/DELETE /admin/organizations/:id` · `GET/POST /admin/users` · `PUT/DELETE /admin/users/:id` · `POST /admin/users/:id/reset-password` · `POST /admin/users/:id/unlock` · `GET /admin/audit` |
+| **Admin** | `GET /admin/meta` · `GET/POST /admin/organizations` · `PUT/DELETE /admin/organizations/:id` · `GET/POST /admin/users` · `PUT/DELETE /admin/users/:id` · `POST /admin/users/:id/reset-password` · `POST /admin/users/:id/unlock` · `POST /admin/users/:id/2fa/disable` · `POST /admin/users/:id/2fa/reset` · `GET /admin/audit` |
 
 ## 🗄️ Database
 

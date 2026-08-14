@@ -59,6 +59,9 @@ function presentUser(user: any) {
     createdAt: user.createdAt,
     overrides: parseOverrides(user.permissions),
     effectivePermissions: computeEffectivePermissions(user.role, user.permissions, user.organization ?? null),
+    twoFactorEnabled: user.twoFactorEnabled,
+    twoFactorRequired: user.twoFactorRequired,
+    twoFactorEnabledAt: user.twoFactorEnabledAt,
   };
 }
 
@@ -419,7 +422,7 @@ export async function updateUser(req: Request, res: Response) {
       }
     }
 
-    const { email, username, role, orgId, active, granted, revoked } = req.body ?? {};
+    const { email, username, role, orgId, active, granted, revoked, twoFactorRequired } = req.body ?? {};
     const data: any = {};
     let accessChanged = false;
 
@@ -500,6 +503,16 @@ export async function updateUser(req: Request, res: Response) {
       }
       data.active = active;
       accessChanged = true;
+    }
+
+    // The mandate: an admin can require 2FA but cannot enroll a device on the
+    // user's behalf, so this only ever turns the requirement on or off.
+    // Turning it on revokes sessions — like any other access-tightening change
+    // here — so the next sign-in cleanly routes into forced enrollment instead
+    // of the user's current session silently starting to 403 mid-use.
+    if (typeof twoFactorRequired === 'boolean' && twoFactorRequired !== target.twoFactorRequired) {
+      data.twoFactorRequired = twoFactorRequired;
+      if (twoFactorRequired) accessChanged = true;
     }
 
     if (granted !== undefined || revoked !== undefined) {
@@ -624,6 +637,97 @@ export async function unlockUser(req: Request, res: Response) {
   } catch (error: any) {
     logger.error('Error unlocking user:', error);
     res.status(500).json({ error: 'Failed to unlock account' });
+  }
+}
+
+/** Shared org/role guard for the 2FA admin actions below. */
+function canManageTwoFactorFor(req: Request, target: { orgId: string | null; role: string }): boolean {
+  if (req.user?.isSuperAdmin) return true;
+  if (target.role === ROLES.SUPER_ADMIN) return false;
+  return target.orgId === req.user?.orgId;
+}
+
+/**
+ * POST /api/admin/users/:id/2fa/disable
+ * Full opt-out: clears the enrollment and any mandate. An admin can never
+ * enroll a device on someone else's behalf — only the user, in their own
+ * account settings, can turn 2FA back on.
+ */
+export async function disableTwoFactorForUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    if (!canManageTwoFactorFor(req, target)) {
+      return res.status(403).json({ error: 'You can only manage users in your own organization' });
+    }
+
+    if (!target.twoFactorEnabled && !target.twoFactorRequired) {
+      return res.json({ message: 'Two-factor authentication was already off for this user' });
+    }
+
+    await prisma.$transaction([
+      prisma.twoFactorRecoveryCode.deleteMany({ where: { userId: id } }),
+      prisma.user.update({
+        where: { id },
+        data: {
+          twoFactorEnabled: false, twoFactorEnabledAt: null, twoFactorSecret: null, twoFactorRequired: false,
+        },
+      }),
+    ]);
+
+    await audit({
+      userId: req.user?.id, actorEmail: req.user?.email,
+      action: 'user.2fa_disable', targetType: 'user', targetId: id, detail: target.email, ip: clientIp(req),
+    });
+    logger.warn(`2FA disabled for ${target.email} by ${req.user?.email}`);
+
+    res.json({ message: 'Two-factor authentication disabled' });
+  } catch (error: any) {
+    logger.error('Error disabling 2FA:', error);
+    res.status(500).json({ error: 'Failed to disable two-factor authentication' });
+  }
+}
+
+/**
+ * POST /api/admin/users/:id/2fa/reset
+ * Clears a lost-device enrollment without touching the mandate: if 2FA was
+ * required, it still is, and the user is walked through enrollment again on
+ * their next sign-in.
+ */
+export async function resetTwoFactorForUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    if (!canManageTwoFactorFor(req, target)) {
+      return res.status(403).json({ error: 'You can only manage users in your own organization' });
+    }
+
+    if (!target.twoFactorEnabled) {
+      return res.status(409).json({ error: 'Two-factor authentication is not enabled for this user', code: 'NOT_ENABLED' });
+    }
+
+    await prisma.$transaction([
+      prisma.twoFactorRecoveryCode.deleteMany({ where: { userId: id } }),
+      prisma.user.update({
+        where: { id },
+        data: { twoFactorEnabled: false, twoFactorEnabledAt: null, twoFactorSecret: null },
+      }),
+    ]);
+
+    await audit({
+      userId: req.user?.id, actorEmail: req.user?.email,
+      action: 'user.2fa_reset', targetType: 'user', targetId: id, detail: target.email, ip: clientIp(req),
+    });
+    logger.warn(`2FA reset (re-enrollment required) for ${target.email} by ${req.user?.email}`);
+
+    res.json({ message: 'Two-factor authentication reset — the user must enroll again' });
+  } catch (error: any) {
+    logger.error('Error resetting 2FA:', error);
+    res.status(500).json({ error: 'Failed to reset two-factor authentication' });
   }
 }
 

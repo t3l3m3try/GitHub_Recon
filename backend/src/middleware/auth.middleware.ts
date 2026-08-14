@@ -30,6 +30,8 @@ declare global {
         permissions: Permission[];
         isSuperAdmin: boolean;
         mustChangePassword: boolean;
+        twoFactorEnabled: boolean;
+        twoFactorRequired: boolean;
       };
     }
   }
@@ -77,6 +79,8 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
       permissions: computeEffectivePermissions(user.role, user.permissions, user.organization),
       isSuperAdmin: user.role === ROLES.SUPER_ADMIN,
       mustChangePassword: user.mustChangePassword,
+      twoFactorEnabled: user.twoFactorEnabled,
+      twoFactorRequired: user.twoFactorRequired,
     };
 
     next();
@@ -126,6 +130,21 @@ export function blockIfPasswordChangeRequired(req: Request, res: Response, next:
     return res.status(403).json({
       error: 'You must change your password before continuing',
       code: 'PASSWORD_CHANGE_REQUIRED',
+    });
+  }
+  next();
+}
+
+/**
+ * Blocks normal API use while an admin-mandated 2FA enrollment is outstanding
+ * (required, but not yet enrolled). The endpoints needed to enroll are exempt
+ * (see routes/index.ts).
+ */
+export function blockIfTwoFactorSetupRequired(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.twoFactorRequired && !req.user?.twoFactorEnabled) {
+    return res.status(403).json({
+      error: 'Two-factor authentication setup is required before continuing',
+      code: 'TWO_FACTOR_SETUP_REQUIRED',
     });
   }
   next();
