@@ -94,7 +94,7 @@ class GitHubService {
     } = {}
   ): Promise<SearchResult[]> {
     try {
-      const { perPage = 30, page = 1, sort, order, retries = 3 } = options;
+      const { perPage = 30, page = 1, sort, order } = options;
 
       logger.info(`Searching code: ${query} (page ${page})`);
 
@@ -159,7 +159,7 @@ class GitHubService {
     options: { perPage?: number; page?: number; retries?: number } = {}
   ): Promise<CommitResult[]> {
     try {
-      const { perPage = 30, page = 1, retries = 3 } = options;
+      const { perPage = 30, page = 1 } = options;
 
       logger.info(`Searching commits: ${query} (page ${page})`);
 
@@ -204,7 +204,7 @@ class GitHubService {
     options: { perPage?: number; page?: number; retries?: number } = {}
   ): Promise<IssueResult[]> {
     try {
-      const { perPage = 30, page = 1, retries = 3 } = options;
+      const { perPage = 30, page = 1 } = options;
 
       logger.info(`Searching issues: ${query} (page ${page})`);
 
@@ -304,32 +304,6 @@ class GitHubService {
   }
 
   /**
-   * Get rate limit status
-   */
-  async getRateLimit(): Promise<{
-    limit: number;
-    remaining: number;
-    reset: Date;
-    used: number;
-  }> {
-    try {
-      const response = await this.octokit.rest.rateLimit.get();
-      const core = response.data.resources.core;
-      const search = response.data.resources.search;
-
-      return {
-        limit: search.limit,
-        remaining: search.remaining,
-        reset: new Date(search.reset * 1000),
-        used: search.used
-      };
-    } catch (error) {
-      logger.error('Error getting rate limit:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Handle rate limit errors
    */
   private async handleRateLimitError(error: any): Promise<void> {
@@ -347,19 +321,6 @@ class GitHubService {
       // Default wait time if no reset time provided
       logger.warn('Rate limit hit. Waiting 60s...');
       await new Promise(resolve => setTimeout(resolve, 60000));
-    }
-  }
-
-  /**
-   * Check if token is valid
-   */
-  async validateToken(): Promise<boolean> {
-    try {
-      await this.octokit.rest.users.getAuthenticated();
-      return true;
-    } catch (error) {
-      logger.error('Token validation failed:', error);
-      return false;
     }
   }
 }

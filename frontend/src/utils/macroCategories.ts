@@ -1,20 +1,19 @@
 export interface MacroCategory {
   id: string;
   name: string;
-  icon: string;
   color: string;
 }
 
 export const MACRO_CATEGORIES: Record<string, MacroCategory> = {
-  emails: { id: 'emails', name: 'Emails', icon: '', color: '#14B8A6' },
-  ai_ml: { id: 'ai_ml', name: 'AI & Machine Learning', icon: '', color: '#8B5CF6' },
-  database_storage: { id: 'database_storage', name: 'Database & Storage', icon: '', color: '#10B981' },
-  payment_fintech: { id: 'payment_fintech', name: 'Payment & Fintech', icon: '', color: '#F59E0B' },
-  marketing_ecommerce: { id: 'marketing_ecommerce', name: 'Marketing & E-commerce', icon: '', color: '#EC4899' },
-  devops_ci_cd: { id: 'devops_ci_cd', name: 'DevOps & CI/CD', icon: '', color: '#3B82F6' },
-  saas_collab: { id: 'saas_collab', name: 'SaaS & Collaboration', icon: '', color: '#06B6D4' },
-  cloud_infra: { id: 'cloud_infra', name: 'Cloud Infrastructure', icon: '', color: '#EF4444' },
-  credentials_auth: { id: 'credentials_auth', name: 'Credentials & Auth', icon: '', color: '#6B7280' }
+  emails: { id: 'emails', name: 'Emails', color: '#14B8A6' },
+  ai_ml: { id: 'ai_ml', name: 'AI & Machine Learning', color: '#8B5CF6' },
+  database_storage: { id: 'database_storage', name: 'Database & Storage', color: '#10B981' },
+  payment_fintech: { id: 'payment_fintech', name: 'Payment & Fintech', color: '#F59E0B' },
+  marketing_ecommerce: { id: 'marketing_ecommerce', name: 'Marketing & E-commerce', color: '#EC4899' },
+  devops_ci_cd: { id: 'devops_ci_cd', name: 'DevOps & CI/CD', color: '#3B82F6' },
+  saas_collab: { id: 'saas_collab', name: 'SaaS & Collaboration', color: '#06B6D4' },
+  cloud_infra: { id: 'cloud_infra', name: 'Cloud Infrastructure', color: '#EF4444' },
+  credentials_auth: { id: 'credentials_auth', name: 'Credentials & Auth', color: '#6B7280' }
 };
 
 export function getMacroCategory(type: string): MacroCategory {

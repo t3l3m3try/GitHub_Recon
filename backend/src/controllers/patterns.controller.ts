@@ -78,7 +78,6 @@ export async function getPatterns(req: Request, res: Response) {
     res.json({
       groups,
       total: SECRET_PATTERNS.length,
-      maxCriticalityScore: MAX_CRITICALITY_SCORE,
       falsePositiveFilters: {
         // Any match whose own text matches one of these is discarded, regardless of type.
         contentPatterns: FALSE_POSITIVE_PATTERNS.map(p => ({ source: p.source, flags: p.flags })),

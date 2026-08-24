@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import GitHubService, { SearchResult, CommitResult, IssueResult } from './github.service';
+import GitHubService from './github.service';
 import {
   SECRET_PATTERNS,
   getDomainPatterns,

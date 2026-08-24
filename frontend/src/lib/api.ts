@@ -25,10 +25,6 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
 export function setAuthLostHandler(handler: (() => void) | null) {
   onAuthLost = handler;
 }
@@ -376,7 +372,6 @@ export interface CriticalityModel {
 export interface PatternCatalog {
   groups: PatternGroup[];
   total: number;
-  maxCriticalityScore: number;
   falsePositiveFilters: FalsePositiveFilters;
   domainPattern: DomainPattern;
   criticalityModel: CriticalityModel;
@@ -386,32 +381,22 @@ export interface PatternCatalog {
 // API functions
 export const domainAPI = {
   getAll: (params?: any) => api.get<Domain[]>('/domains', { params }),
-  getOne: (id: string) => api.get<Domain>(`/domains/${id}`),
   create: (data: { name: string; scanFrequency?: string; orgId?: string }) =>
     api.post<Domain>('/domains', data),
-  update: (id: string, data: Partial<Domain>) =>
-    api.put<Domain>(`/domains/${id}`, data),
   delete: (id: string) => api.delete(`/domains/${id}`),
 };
 
 export const scanAPI = {
   getAll: (params?: any) => api.get<{ scans: Scan[]; pagination: any }>('/scans', { params }),
-  getOne: (id: string) => api.get<Scan>(`/scans/${id}`),
   create: (data: { domainId: string }) => api.post<Scan>('/scans', data),
   cancel: (id: string) => api.delete(`/scans/${id}`),
-  getFindings: (id: string, params?: any) =>
-    api.get<{ findings: Finding[]; pagination: any }>(`/scans/${id}/findings`, { params }),
 };
 
 export const findingsAPI = {
   getAll: (params?: any) =>
     api.get<{ findings: Finding[]; pagination: any }>('/findings', { params }),
-  getOne: (id: string) => api.get<Finding>(`/findings/${id}`),
   update: (id: string, data: Partial<Finding>) =>
     api.put<Finding>(`/findings/${id}`, data),
-  bulkUpdate: (findingIds: string[], updates: Partial<Finding>) =>
-    api.post('/findings/bulk-update', { findingIds, updates }),
-  delete: (id: string) => api.delete(`/findings/${id}`),
   getStats: (params?: any) => api.get<any>('/findings/stats', { params }),
 };
 

@@ -186,7 +186,3 @@ export function computeEffectivePermissions(
 
   return Array.from(set);
 }
-
-export function hasPermission(permissions: string[], required: Permission): boolean {
-  return permissions.includes(required);
-}

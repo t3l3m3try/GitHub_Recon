@@ -151,14 +151,13 @@ export default function Dashboard() {
   const byOrganization = stats?.byOrganization || [];
   const topTypes = (() => {
     if (!stats?.byType) return [];
-    const macroMap: Record<string, { id: string; name: string; icon: string; color: string; count: number; subTypes: string[] }> = {};
+    const macroMap: Record<string, { id: string; name: string; color: string; count: number; subTypes: string[] }> = {};
     for (const item of stats.byType) {
       const category = getMacroCategory(item.type);
       if (!macroMap[category.id]) {
         macroMap[category.id] = {
           id: category.id,
           name: category.name,
-          icon: category.icon,
           color: category.color,
           count: 0,
           subTypes: []

@@ -1,4 +1,4 @@
-import { calculateEntropy, hasContextKeywords } from '../utils/patterns';
+import { calculateEntropy } from '../utils/patterns';
 
 /**
  * Scoring Service

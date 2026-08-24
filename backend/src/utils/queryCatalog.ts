@@ -576,19 +576,10 @@ export function renderQuery(template: string, domain: string): string {
   return template.split('{domain}').join(domain);
 }
 
-export function getQueryById(id: string): QueryDefinition | undefined {
-  return QUERY_BY_ID.get(id);
-}
-
 export function isKnownQueryId(id: string): boolean {
   return QUERY_BY_ID.has(id);
 }
 
 export function getAreasForTarget(target: QueryTarget): QueryArea[] {
   return QUERY_CATALOG.filter(area => area.target === target);
-}
-
-/** Total number of catalog queries per target — used for UI counters and sanity checks. */
-export function countQueriesForTarget(target: QueryTarget): number {
-  return getAreasForTarget(target).reduce((sum, area) => sum + area.queries.length, 0);
 }
