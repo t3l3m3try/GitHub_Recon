@@ -2,7 +2,8 @@
 
 A multi-tenant platform for detecting sensitive information exposed in public GitHub repositories. GitHub Recon monitors your organization's domains for leaked email addresses, API keys, credentials, private keys and other secrets, then ranks what it finds by how dangerous it actually is.
 
-<img width="1385" height="811" alt="2" src="https://github.com/user-attachments/assets/a42bc8ef-bdbb-484a-8ba9-1d98bb9ce1d2" />
+<img width="1662" height="980" alt="1" src="https://github.com/user-attachments/assets/22b64f77-20c6-4381-90d2-697dd40ecc60" />
+
 
 ## 🚀 Key Features
 
