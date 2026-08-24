@@ -49,34 +49,47 @@ export interface CommitResult {
   }[];
 }
 
+/**
+ * Rate limiters are module-level singletons, not per-instance.
+ *
+ * Every scan constructs its own GitHubService, but all of them authenticate
+ * with the same GITHUB_TOKEN and so draw against the same GitHub-side quota.
+ * A per-instance Bottleneck would let N concurrent scans each believe they
+ * have the full 30 req/min, sending up to N*30 to GitHub and drawing 403s —
+ * these two limiters are shared by every GitHubService in the process so the
+ * real quota is enforced once, in total, regardless of how many domains are
+ * scanning at once. Concurrent scans still complete correctly; they just
+ * divide the same budget and take proportionally longer.
+ */
+
+// Search API rate limiter — GitHub enforces 30 requests/min for code search
+const SEARCH_LIMITER = new Bottleneck({
+  reservoir: 30,
+  reservoirRefreshAmount: 30,
+  reservoirRefreshInterval: 60 * 1000,
+  maxConcurrent: 3,  // Reduced from 5 to limit peak parallel queries
+  minTime: 2000
+});
+
+// Core API rate limiter — GitHub allows 5000 requests/hour (~83/min)
+// Used for blob fetches which are NOT subject to the search rate limit
+const CORE_LIMITER = new Bottleneck({
+  reservoir: 80,
+  reservoirRefreshAmount: 80,
+  reservoirRefreshInterval: 60 * 1000,
+  maxConcurrent: 3, // Reduced from 10 to flatten CPU load during heavy blob parsing
+  minTime: 500      // Decreased to speed up parallel blob fetching
+});
+
 class GitHubService {
   private octokit: Octokit;
-  private limiter: Bottleneck;       // Search API: 30 req/min (strict GitHub limit)
-  private coreLimiter: Bottleneck;   // Core API (blobs, repos): 5000 req/hour
+  private limiter = SEARCH_LIMITER;
+  private coreLimiter = CORE_LIMITER;
 
   constructor(token: string) {
     this.octokit = new Octokit({
       auth: token,
       userAgent: 'GitHub-CTI-Monitor/1.0'
-    });
-
-    // Search API rate limiter — GitHub enforces 30 requests/min for code search
-    this.limiter = new Bottleneck({
-      reservoir: 30,
-      reservoirRefreshAmount: 30,
-      reservoirRefreshInterval: 60 * 1000,
-      maxConcurrent: 3,  // Reduced from 5 to limit peak parallel queries
-      minTime: 2000
-    });
-
-    // Core API rate limiter — GitHub allows 5000 requests/hour (~83/min)
-    // Used for blob fetches which are NOT subject to the search rate limit
-    this.coreLimiter = new Bottleneck({
-      reservoir: 80,
-      reservoirRefreshAmount: 80,
-      reservoirRefreshInterval: 60 * 1000,
-      maxConcurrent: 3, // Reduced from 10 to flatten CPU load during heavy blob parsing
-      minTime: 500      // Decreased to speed up parallel blob fetching
     });
   }
 
