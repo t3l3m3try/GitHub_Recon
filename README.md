@@ -8,9 +8,9 @@ A multi-tenant platform for detecting sensitive information exposed in public Gi
 ## 🚀 Key Features
 
 - **Comprehensive scanning** — searches code, commit messages and issues across public repositories, forks and wikis.
-- **280+ secret detection patterns** — AWS, GitHub, GitLab, cloud providers, payment processors, AI/ML services, databases, private keys and more.
+- **280 secret types across 349 detection patterns** — AWS, GitHub, GitLab, cloud providers, payment processors, AI/ML services, databases, private keys and more. Every regex, its entropy threshold and its severity weight are browsable in the UI.
 - **247 configurable search queries** — every GitHub search the scanner performs is listed, grouped and individually switchable. Turn off what you don't need and scans get proportionally cheaper.
-- **Intelligent scoring** — findings are ranked CRITICAL → INFO using entropy analysis, surrounding context and file type, so the noise sinks.
+- **Intelligent scoring** — findings are ranked CRITICAL → INFO using entropy analysis, surrounding context, commit recency and file type, so the noise sinks. The full 0-100 formula is published in the UI rather than hidden in the code.
 - **Multi-tenancy** — organizations keep their data separate. Members see their own organization's domains and findings and nothing else.
 - **Role-based access control** — four roles plus per-user permission overrides, all administered from the UI.
 - **Secure authentication** — bcrypt password hashing, short-lived access tokens, rotating refresh tokens in httpOnly cookies, account lockout and an audit trail. See [SECURITY.md](SECURITY.md).
@@ -112,17 +112,35 @@ Turning off 2FA or regenerating recovery codes always needs both the current pas
 3. Go to **Admin → Users → New User**, pick a role and organization. A strong temporary password is generated and shown once — hand it to the user; they must change it at first sign-in.
 4. Adjust individual permissions from the shield icon on any user row.
 
-## 🔎 Queries
+## 🔎 Queries & Detection
 
-The **Queries** section lists all 247 GitHub searches the scanner can perform, grouped by target and macro area:
+The **Queries** section has three tabs, covering the two distinct stages of a scan — *what GitHub is asked* and *what the results are matched against*.
 
-- **Code Search** — 193 queries across 16 areas (Email Discovery, Credentials & Auth, Cloud Infrastructure, Database & Storage, DevOps & CI/CD, Infrastructure as Code, Config & Secret Files, Backups & Shell History, Secret Managers, Package Registries, Payment & Fintech, Communication & SaaS, AI & Machine Learning, Monitoring, Internal Infra & Recon, Other Services)
+### Search Queries
+
+All 247 GitHub searches the scanner can perform, grouped by target and macro area:
+
+- **Code Search** — 193 queries across 16 areas (Email Discovery, Credentials & Auth, Cloud Infrastructure, Database & Storage, DevOps & CI/CD, Infrastructure as Code, Config & Secret Files, Backups, Dumps & Shell History, Secret Managers & Vaults, Package Registries & Artifacts, Payment & Fintech, Communication & SaaS, AI & Machine Learning, Monitoring & Observability, Internal Infra & Recon, Other Services)
 - **Commit Search** — 30 queries across 7 areas
 - **Issue Search** — 24 queries across 7 areas
 
 Every query is individually switchable and shows the exact GitHub syntax it will send, rendered against a domain of your choice. The selection is saved per user and applies to all of that user's future scans. A target with no enabled queries is skipped entirely.
 
 This matters for cost: each code query is paginated up to 10 pages of 100 results and re-run against forks, so a full 247-query scan is expensive against GitHub's rate limit of 30 search requests per minute. Narrowing the selection makes scans proportionally faster.
+
+### Detection Patterns
+
+Read-only view of the 349 regex patterns, grouped into 280 secret types, that every search result is matched against. Each entry shows its regex source and flags, its entropy threshold, the context keywords that raise its score, and an example of what it matches. Unlike queries these are not user-configurable — they define what a finding *is*.
+
+### Detection Settings
+
+The scoring model itself, served from the same source of truth the scanner uses so the numbers can never drift from the code:
+
+- the always-on per-domain email pattern that runs alongside the static patterns
+- false-positive suppression — the content regexes and context substrings that discard a match outright
+- the 0-100 criticality formula: how many points come from secret type, entropy, surrounding context and commit recency, the keyword bonuses and comment penalty, the recency brackets, the CRITICAL/HIGH/MEDIUM/LOW/INFO thresholds, and how several secrets in one file aggregate
+
+Both tabs require `query:read`, the same permission as the query list.
 
 ## ⚙️ Configuration
 
@@ -137,6 +155,7 @@ All settings are read from `.env` in the project root, or `backend/.env`. Neithe
 | `PORT` | — | `3001` | Backend port |
 | `FRONTEND_URL` | — | `http://localhost:5173` | Allowed CORS origin (credentials mode forbids a wildcard) |
 | `NODE_ENV` | — | `development` | `production` enables Secure cookies and requires `JWT_SECRET` |
+| `LOG_LEVEL` | — | `info` | Winston log level (`error`, `warn`, `info`, `debug`) |
 | `SUPER_ADMIN_EMAIL` | — | `superadmin@localhost.local` | Email for the seeded administrator |
 | `SUPER_ADMIN_USERNAME` | — | `superadmin` | Username for the seeded administrator |
 | `SUPER_ADMIN_PASSWORD` | — | none — set via the first-run setup screen | Optional: provision it non-interactively instead; must satisfy the password policy |
@@ -163,6 +182,7 @@ All endpoints live under `/api`. Every route except `/health`, `/auth/login`, `/
 | **Scans** | `GET/POST /scans` · `GET /scans/:id` · `GET /scans/:id/findings` · `DELETE /scans/:id` |
 | **Findings** | `GET /findings` · `GET /findings/stats` · `GET /findings/export` · `GET/PUT/DELETE /findings/:id` · `POST /findings/bulk-update` |
 | **Queries** | `GET/PUT /queries` · `POST /queries/reset` |
+| **Detection patterns** | `GET /patterns` |
 | **Admin** | `GET /admin/meta` · `GET/POST /admin/organizations` · `PUT/DELETE /admin/organizations/:id` · `GET/POST /admin/users` · `PUT/DELETE /admin/users/:id` · `POST /admin/users/:id/reset-password` · `POST /admin/users/:id/unlock` · `POST /admin/users/:id/2fa/disable` · `POST /admin/users/:id/2fa/reset` · `GET /admin/audit` |
 
 ## 🗄️ Database

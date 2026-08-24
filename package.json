@@ -1,7 +1,7 @@
 {
-  "name": "github-cti-monitor",
+  "name": "github-recon",
   "version": "1.0.0",
-  "description": "CTI platform for detecting sensitive information in public GitHub repositories",
+  "description": "Multi-tenant platform for detecting sensitive information exposed in public GitHub repositories",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
@@ -11,12 +11,12 @@
     "build:frontend": "cd frontend && npm run build"
   },
   "keywords": [
-    "cti",
     "github",
     "security",
+    "secrets-detection",
     "threat-intelligence"
   ],
-  "author": "CTI Security Team",
+  "author": "t3l3m3try",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
