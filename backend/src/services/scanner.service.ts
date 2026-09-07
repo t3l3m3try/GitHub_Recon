@@ -37,6 +37,23 @@ interface ExtractedSecret {
 // Global registry of active scans for cancellation
 const activeScans = new Map<string, AbortController>();
 
+/**
+ * Persist findings in atomic batch transactions to minimize SQLite write-lock contention.
+ */
+async function saveFindingsBatch(items: any[]): Promise<any[]> {
+  if (!items || items.length === 0) return [];
+  const results: any[] = [];
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const chunk = items.slice(i, i + BATCH_SIZE);
+    const created = await prisma.$transaction(
+      chunk.map(data => prisma.finding.create({ data, include: { secrets: true, committers: true } }))
+    );
+    results.push(...created);
+  }
+  return results;
+}
+
 class ScannerService {
   private githubService: GitHubService;
 
@@ -104,7 +121,12 @@ class ScannerService {
       try {
         await prisma.scan.update({
           where: { id: scanId },
-          data: { errorMessage: `PROGRESS:${progressData}` }
+          data: {
+            progressPercent: percent,
+            currentPhase: phase,
+            progressDetails: progressData,
+            errorMessage: `PROGRESS:${progressData}` // Backward compatibility
+          }
         });
       } catch (e) {
         // Non-critical
@@ -135,6 +157,7 @@ class ScannerService {
 
       const allRawFindings: any[] = [];
       const seenContentHashes = new Set<string>();
+      const processedBlobShas = new Set<string>();
 
       // Cross-scan deduplication: pre-load content hashes of ALL existing secrets
       // for this domain so that re-scanning the same domain never creates duplicates.
@@ -143,17 +166,26 @@ class ScannerService {
           finding: {
             scan: {
               domain: { name: domain },
-              status: { in: ['COMPLETED', 'FAILED', 'CANCELLED'] }
-            },
-            NOT: { scanId }   // exclude the current scan (it's still RUNNING)
+              status: 'COMPLETED'
+            }
           }
         },
-        select: { content: true, finding: { select: { repository: true, filePath: true } } }
+        select: {
+          content: true,
+          finding: {
+            select: {
+              repository: true,
+              filePath: true
+            }
+          }
+        }
       });
+
       for (const s of existingSecrets) {
         seenContentHashes.add(this.hashContent(s.content + s.finding.repository + s.finding.filePath));
       }
-      logger.info(`Cross-scan dedup: pre-loaded ${existingSecrets.length} existing hashes for ${domain}`);
+
+      logger.info(`Loaded ${seenContentHashes.size} existing content hashes for deduplication`);
 
       const checkAbort = () => {
         if (signal.aborted) {
@@ -165,7 +197,7 @@ class ScannerService {
       if (includeCode) {
         checkAbort();
         logger.info(`Phase 1/3: Scanning code repositories (${codeQueries.length} queries)...`);
-        const codeFindings = await this.scanCode(scanId, domain, codeQueries, signal, seenContentHashes, domainValidationRegex, async (step, total, msg) => {
+        const codeFindings = await this.scanCode(scanId, domain, codeQueries, signal, seenContentHashes, domainValidationRegex, processedBlobShas, async (step, total, msg) => {
           completedSteps = step;
           await updateProgress('code', step, total, msg, allRawFindings.length);
         });
@@ -220,6 +252,16 @@ class ScannerService {
           status: 'COMPLETED',
           completedAt: new Date(),
           totalFindings: allRawFindings.length,
+          progressPercent: 100,
+          currentPhase: 'COMPLETED',
+          progressDetails: JSON.stringify({
+            percent: 100,
+            phase: 'COMPLETED',
+            step: totalSteps,
+            totalSteps,
+            message: 'Scan completed successfully',
+            findings: allRawFindings.length
+          }),
           errorMessage: null,
           ...counts
         }
@@ -237,7 +279,12 @@ class ScannerService {
         logger.info(`Scan ${scanId} was cancelled by user`);
         await prisma.scan.update({
           where: { id: scanId },
-          data: { status: 'CANCELLED', completedAt: new Date(), errorMessage: 'Scan cancelled by user' }
+          data: {
+            status: 'CANCELLED',
+            completedAt: new Date(),
+            currentPhase: 'CANCELLED',
+            errorMessage: 'Scan cancelled by user'
+          }
         });
         return;
       }
@@ -251,7 +298,12 @@ class ScannerService {
       logger.error(`Scan ${scanId} failed:`, error);
       await prisma.scan.update({
         where: { id: scanId },
-        data: { status: 'FAILED', completedAt: new Date(), errorMessage: detailedMessage }
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          currentPhase: 'FAILED',
+          errorMessage: detailedMessage
+        }
       });
 
       throw error;
@@ -270,6 +322,7 @@ class ScannerService {
     signal: AbortSignal,
     seenHashes: Set<string>,
     domainValidationRegex: RegExp,
+    processedBlobShas: Set<string>,
     onProgress: (step: number, total: number, message: string) => Promise<void>
   ): Promise<any[]> {
     const findings: any[] = [];
@@ -310,8 +363,10 @@ class ScannerService {
                 page
               });
               for (const result of pageResults) {
-                if (!seenShas.has(result.sha)) {
+                // Cross-query and intra-query deduplication by blob SHA
+                if (!processedBlobShas.has(result.sha) && !seenShas.has(result.sha)) {
                   seenShas.add(result.sha);
+                  processedBlobShas.add(result.sha);
                   allPageResults.push(result);
                 }
               }
@@ -337,6 +392,8 @@ class ScannerService {
           logger.info(`Query ${queryIndex}/${queries.length} "${label}"${isEmailQuery ? ' [EMAIL-MULTI-PAGE]' : ''} → ${results.length} results`);
 
           let resultCount = 0;
+          const pendingBatch: any[] = [];
+
           for (const result of results) {
             if (signal.aborted) break;
             resultCount++;
@@ -373,6 +430,8 @@ class ScannerService {
 
               const entropy = calculateEntropy(secret.content);
 
+              const lineNumber = result.content.substring(0, secret.matchIndex).split('\n').length;
+
               let score: number;
               let criticality: string;
 
@@ -384,22 +443,17 @@ class ScannerService {
                 criticality = 'MEDIUM';
               } else {
                 score = calculateCriticalityScore({
-                  type: secret.type, content: secret.content, context,
-                  repository: result.repository, entropy
+                  type: secret.type,
+                  content: secret.content,
+                  context,
+                  repository: result.repository,
+                  entropy
                 });
                 criticality = scoreToCriticality(score);
               }
 
-              // Compute exact 1-based line number where the secret was detected in file content
-              let lineNumber: number | undefined;
-              if (typeof secret.matchIndex === 'number' && result.content) {
-                lineNumber = result.content.substring(0, secret.matchIndex).split('\n').length;
-              }
-
               validSecrets.push({
-                type: secret.type,
-                content: secret.content,
-                contentPreview: createPreview(secret.content),
+                ...secret,
                 context,
                 lineNumber,
                 score,
@@ -426,42 +480,52 @@ class ScannerService {
               logger.warn(`Failed to fetch committer details during scan for ${result.repository}/${result.filePath}:`, commitErr);
             }
 
-            const finding = await prisma.finding.create({
-              data: {
-                scanId,
-                repository: result.repository,
-                repositoryUrl: result.repositoryUrl,
-                filePath: result.filePath,
-                fileUrl: anchoredFileUrl,
-                commitSha: commitDetails?.commitSha || result.commitSha,
-                commitUrl: commitDetails?.commitUrl || result.commitUrl,
-                commitDate: commitDetails?.commitDate,
-                committerEmail: commitDetails?.primaryEmail || null,
-                score: fileScore,
-                primaryType,
-                criticality: fileCriticality,
-                committers: commitDetails?.committers && commitDetails.committers.length > 0 ? {
-                  create: commitDetails.committers.map((c: any) => ({
-                    email: c.email,
-                    name: c.name,
-                    commitSha: c.commitSha,
-                    commitDate: c.commitDate
-                  }))
-                } : undefined,
-                secrets: {
-                  create: validSecrets.map(s => ({
-                    type: s.type,
-                    criticality: s.criticality,
-                    content: s.content,
-                    contentPreview: s.contentPreview,
-                    context: s.context,
-                    lineNumber: s.lineNumber
-                  }))
-                }
-              },
-              include: { secrets: true }
+            pendingBatch.push({
+              scanId,
+              repository: result.repository,
+              repositoryUrl: result.repositoryUrl,
+              filePath: result.filePath,
+              fileUrl: anchoredFileUrl,
+              commitSha: commitDetails?.commitSha || result.commitSha,
+              commitUrl: commitDetails?.commitUrl || result.commitUrl,
+              commitDate: commitDetails?.commitDate,
+              committerEmail: commitDetails?.primaryEmail || null,
+              score: fileScore,
+              primaryType,
+              criticality: fileCriticality,
+              committers: commitDetails?.committers && commitDetails.committers.length > 0 ? {
+                create: commitDetails.committers.map((c: any) => ({
+                  email: c.email,
+                  name: c.name,
+                  commitSha: c.commitSha,
+                  commitDate: c.commitDate
+                }))
+              } : undefined,
+              secrets: {
+                create: validSecrets.map(s => ({
+                  type: s.type,
+                  criticality: s.criticality,
+                  content: s.content,
+                  contentPreview: createPreview(s.content),
+                  context: s.context,
+                  lineNumber: s.lineNumber
+                }))
+              }
             });
-            findings.push(finding);
+
+            // Flush in atomic batch of 20 to prevent holding SQLite locks
+            if (pendingBatch.length >= 20) {
+              const saved = await saveFindingsBatch(pendingBatch);
+              findings.push(...saved);
+              pendingBatch.length = 0;
+            }
+          }
+
+          // Flush any remaining findings for this query
+          if (pendingBatch.length > 0) {
+            const saved = await saveFindingsBatch(pendingBatch);
+            findings.push(...saved);
+            pendingBatch.length = 0;
           }
         } catch (error: any) {
           if (error.message === 'SCAN_CANCELLED' || signal.aborted) throw error;
@@ -529,6 +593,7 @@ class ScannerService {
           const results = allPageResults;
           logger.info(`Commit query ${queryIndex}/${commitQueries.length} "${query}" → ${results.length} results`);
 
+          const pendingBatch: any[] = [];
           for (const result of results) {
             if (signal.aborted) break;
 
@@ -621,42 +686,50 @@ class ScannerService {
               }
             }
 
-            const finding = await prisma.finding.create({
-              data: {
-                scanId,
-                repository: result.repository,
-                repositoryUrl: result.repositoryUrl,
-                filePath: result.commitSha,
-                fileUrl: result.commitUrl,
-                commitSha: result.commitSha,
-                commitUrl: result.commitUrl,
-                commitDate: result.commitDate,
-                committerEmail: primaryCommitterEmail || null,
-                score: fileScore,
-                primaryType,
-                criticality: fileCriticality,
-                committers: committersToRecord.length > 0 ? {
-                  create: committersToRecord.map(c => ({
-                    email: c.email,
-                    name: c.name,
-                    commitSha: c.commitSha,
-                    commitDate: c.commitDate
-                  }))
-                } : undefined,
-                secrets: {
-                  create: validSecrets.map(s => ({
-                    type: s.type,
-                    criticality: s.criticality,
-                    content: s.content,
-                    contentPreview: s.contentPreview,
-                    context: s.context,
-                    lineNumber: s.lineNumber
-                  }))
-                }
-              },
-              include: { secrets: true }
+            pendingBatch.push({
+              scanId,
+              repository: result.repository,
+              repositoryUrl: result.repositoryUrl,
+              filePath: result.commitSha,
+              fileUrl: result.commitUrl,
+              commitSha: result.commitSha,
+              commitUrl: result.commitUrl,
+              commitDate: result.commitDate,
+              committerEmail: primaryCommitterEmail || null,
+              score: fileScore,
+              primaryType,
+              criticality: fileCriticality,
+              committers: committersToRecord.length > 0 ? {
+                create: committersToRecord.map(c => ({
+                  email: c.email,
+                  name: c.name,
+                  commitSha: c.commitSha,
+                  commitDate: c.commitDate
+                }))
+              } : undefined,
+              secrets: {
+                create: validSecrets.map(s => ({
+                  type: s.type,
+                  criticality: s.criticality,
+                  content: s.content,
+                  contentPreview: s.contentPreview,
+                  context: s.context,
+                  lineNumber: s.lineNumber
+                }))
+              }
             });
-            findings.push(finding);
+
+            if (pendingBatch.length >= 20) {
+              const saved = await saveFindingsBatch(pendingBatch);
+              findings.push(...saved);
+              pendingBatch.length = 0;
+            }
+          }
+
+          if (pendingBatch.length > 0) {
+            const saved = await saveFindingsBatch(pendingBatch);
+            findings.push(...saved);
+            pendingBatch.length = 0;
           }
         } catch (error: any) {
           if (error.message === 'SCAN_CANCELLED' || signal.aborted) throw error;
@@ -718,6 +791,7 @@ class ScannerService {
           const results = allPageResults;
           logger.info(`Issue query ${queryIndex}/${issueQueries.length} "${label}" (${query}) → ${results.length} results`);
 
+          const pendingBatch: any[] = [];
           for (const result of results) {
             if (signal.aborted) break;
             const content = `${result.title}\n\n${result.body}`;
@@ -798,30 +872,38 @@ class ScannerService {
 
             const { score: fileScore, primaryType, criticality: fileCriticality } = calculateFileCriticalityScore(validSecrets);
 
-            const finding = await prisma.finding.create({
-              data: {
-                scanId,
-                repository: result.repository,
-                repositoryUrl: result.url,
-                filePath: `issue-${result.issueNumber}`,
-                issueNumber: result.issueNumber,
-                score: fileScore,
-                primaryType,
-                criticality: fileCriticality,
-                secrets: {
-                  create: validSecrets.map(s => ({
-                    type: s.type,
-                    criticality: s.criticality,
-                    content: s.content,
-                    contentPreview: s.contentPreview,
-                    context: s.context,
-                    lineNumber: s.lineNumber
-                  }))
-                }
-              },
-              include: { secrets: true }
+            pendingBatch.push({
+              scanId,
+              repository: result.repository,
+              repositoryUrl: result.url,
+              filePath: `issue-${result.issueNumber}`,
+              issueNumber: result.issueNumber,
+              score: fileScore,
+              primaryType,
+              criticality: fileCriticality,
+              secrets: {
+                create: validSecrets.map(s => ({
+                  type: s.type,
+                  criticality: s.criticality,
+                  content: s.content,
+                  contentPreview: s.contentPreview,
+                  context: s.context,
+                  lineNumber: s.lineNumber
+                }))
+              }
             });
-            findings.push(finding);
+
+            if (pendingBatch.length >= 20) {
+              const saved = await saveFindingsBatch(pendingBatch);
+              findings.push(...saved);
+              pendingBatch.length = 0;
+            }
+          }
+
+          if (pendingBatch.length > 0) {
+            const saved = await saveFindingsBatch(pendingBatch);
+            findings.push(...saved);
+            pendingBatch.length = 0;
           }
         } catch (error: any) {
           if (error.message === 'SCAN_CANCELLED' || signal.aborted) throw error;

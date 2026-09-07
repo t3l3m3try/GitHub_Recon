@@ -27,6 +27,8 @@ pnpm-debug.log*
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
 
 # OS files
 .DS_Store

@@ -184,9 +184,12 @@ model Scan {
   mediumCount   Int        @default(0)
   lowCount      Int        @default(0)
   infoCount     Int        @default(0)
-  errorMessage  String?
-  createdAt     DateTime   @default(now())
-  findings      Finding[]
+  errorMessage    String?
+  progressPercent Int        @default(0)
+  currentPhase    String?
+  progressDetails String?    // JSON serialized progress payload
+  createdAt       DateTime   @default(now())
+  findings        Finding[]
 
   @@index([domainId])
   @@index([userId])

@@ -144,7 +144,11 @@ export async function getScans(req: Request, res: Response) {
     const annotatedScans = scans.map(scan => {
       const isActive = ScannerService.isRunning(scan.id);
       let progress = null;
-      if (scan.errorMessage?.startsWith('PROGRESS:')) {
+      if (scan.progressDetails) {
+        try {
+          progress = JSON.parse(scan.progressDetails);
+        } catch { /* ignore parse errors */ }
+      } else if (scan.errorMessage?.startsWith('PROGRESS:')) {
         try {
           progress = JSON.parse(scan.errorMessage.substring(9));
         } catch { /* ignore parse errors */ }
@@ -208,7 +212,11 @@ export async function getScan(req: Request, res: Response) {
 
     // Add live status and parsed progress
     let progress = null;
-    if (scan.errorMessage?.startsWith('PROGRESS:')) {
+    if (scan.progressDetails) {
+      try {
+        progress = JSON.parse(scan.progressDetails);
+      } catch { /* ignore */ }
+    } else if (scan.errorMessage?.startsWith('PROGRESS:')) {
       try {
         progress = JSON.parse(scan.errorMessage.substring(9));
       } catch { /* ignore */ }

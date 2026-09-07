@@ -461,7 +461,14 @@ export async function getStatistics(req: Request, res: Response) {
     // per organization without N+1 queries.
     const wantsOrgBreakdown = scope.unscoped && !domain;
 
-    // Optimized: single groupBy for criticality counts instead of 8 separate COUNT queries
+    // Optimized queries:
+    // 1. Group-by for criticality, types, top repositories, top files, top committers, top emails
+    // 2. Fast SQL COUNT(DISTINCT) for unique files, repos, committers, and emails
+    const targetOrgId = req.user?.orgId ?? '';
+    const targetDomain = (domain as string) ?? '';
+    const isUnscoped = scope.unscoped ? 1 : 0;
+    const hasDomain = domain ? 1 : 0;
+
     const [
       criticalityGroups,
       verifiedCount,
@@ -469,11 +476,10 @@ export async function getStatistics(req: Request, res: Response) {
       byType,
       topRepositories,
       topFiles,
-      uniqueEmailGroups,
-      uniqueRepositoriesGroups,
-      uniqueFilesGroups,
+      topEmails,
       topCommitters,
-      uniqueCommittersGroups,
+      countsRow,
+      emailCountsRow,
       orgBreakdownRows
     ] = await Promise.all([
       prisma.finding.groupBy({
@@ -495,36 +501,20 @@ export async function getStatistics(req: Request, res: Response) {
         orderBy: { _count: { repository: 'desc' } },
         take: 10
       }),
-      // Get top files by the number of findings they appear in (high-performance SQLite group-by)
       prisma.finding.groupBy({
         by: ['filePath'],
         where: baseWhere,
-        _count: {
-          id: true
-        },
-        orderBy: {
-          _count: {
-            id: 'desc'
-          }
-        },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
         take: 10
       }),
-      // Count unique email addresses (grouped by content where type = EMAIL)
       prisma.secret.groupBy({
         by: ['content'],
-        where: { type: 'EMAIL', finding: baseWhere }
+        where: { type: 'EMAIL', finding: baseWhere },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 10
       }),
-      // Total unique repositories
-      prisma.finding.groupBy({
-        by: ['repository'],
-        where: baseWhere
-      }),
-      // Total unique files
-      prisma.finding.groupBy({
-        by: ['filePath'],
-        where: baseWhere
-      }),
-      // Top committers by findings count
       prisma.finding.groupBy({
         by: ['committerEmail'],
         where: { ...baseWhere, committerEmail: { not: null } },
@@ -532,11 +522,30 @@ export async function getStatistics(req: Request, res: Response) {
         orderBy: { _count: { id: 'desc' } },
         take: 10
       }),
-      // Total unique committers
-      prisma.finding.groupBy({
-        by: ['committerEmail'],
-        where: { ...baseWhere, committerEmail: { not: null } }
-      }),
+      // High-performance SQL COUNT(DISTINCT) for finding metrics in a single query
+      prisma.$queryRaw<Array<{ uniqueRepositories: number; uniqueFiles: number; uniqueCommitters: number }>>`
+        SELECT 
+          COUNT(DISTINCT f.repository) AS uniqueRepositories,
+          COUNT(DISTINCT f.filePath) AS uniqueFiles,
+          COUNT(DISTINCT f.committerEmail) AS uniqueCommitters
+        FROM "Finding" f
+        JOIN "Scan" s ON s.id = f."scanId"
+        JOIN "Domain" d ON d.id = s."domainId"
+        WHERE (${isUnscoped} = 1 OR d."orgId" = ${targetOrgId})
+          AND (${hasDomain} = 0 OR d.name = ${targetDomain})
+      `,
+      // High-performance SQL COUNT(DISTINCT) for unique email addresses
+      prisma.$queryRaw<Array<{ uniqueEmails: number }>>`
+        SELECT 
+          COUNT(DISTINCT sec.content) AS uniqueEmails
+        FROM "Secret" sec
+        JOIN "Finding" f ON f.id = sec."findingId"
+        JOIN "Scan" s ON s.id = f."scanId"
+        JOIN "Domain" d ON d.id = s."domainId"
+        WHERE sec.type = 'EMAIL'
+          AND (${isUnscoped} = 1 OR d."orgId" = ${targetOrgId})
+          AND (${hasDomain} = 0 OR d.name = ${targetDomain})
+      `,
       // Per-organization totals, only computed for the unscoped all-orgs view
       wantsOrgBreakdown
         ? prisma.$queryRaw<Array<{ orgId: string; orgName: string; orgSlug: string; total: number; critical: number; high: number }>>`
@@ -561,6 +570,11 @@ export async function getStatistics(req: Request, res: Response) {
       critMap[group.criticality] = group._count;
       totalFindings += group._count;
     }
+
+    const uniqueReposCount = Number(countsRow[0]?.uniqueRepositories ?? 0);
+    const uniqueFilesCount = Number(countsRow[0]?.uniqueFiles ?? 0);
+    const uniqueCommittersCount = Number(countsRow[0]?.uniqueCommitters ?? 0);
+    const uniqueEmailsCount = Number(emailCountsRow[0]?.uniqueEmails ?? 0);
 
     res.json({
       overview: {
@@ -591,11 +605,15 @@ export async function getStatistics(req: Request, res: Response) {
         email: item.committerEmail,
         count: item._count.id
       })),
-      uniqueEmails: uniqueEmailGroups.length,
+      topEmails: topEmails.map((item: any) => ({
+        email: item.content,
+        count: item._count.id
+      })),
+      uniqueEmails: uniqueEmailsCount,
       uniqueFindingTypes: byType.length,
-      uniqueRepositories: uniqueRepositoriesGroups.length,
-      uniqueFiles: uniqueFilesGroups.length,
-      uniqueCommitters: uniqueCommittersGroups.length,
+      uniqueRepositories: uniqueReposCount,
+      uniqueFiles: uniqueFilesCount,
+      uniqueCommitters: uniqueCommittersCount,
       byOrganization: (orgBreakdownRows as any[]).map((row) => ({
         orgId: row.orgId,
         orgName: row.orgName,

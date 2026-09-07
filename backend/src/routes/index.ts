@@ -16,6 +16,10 @@ import {
   requireSuperAdmin,
 } from '../middleware/auth.middleware';
 import { PERMISSIONS } from '../utils/permissions';
+import { validateBody } from '../middleware/validate.middleware';
+import { createDomainSchema, updateDomainSchema } from '../schemas/domain.schema';
+import { createScanSchema } from '../schemas/scan.schema';
+import { loginSchema, changePasswordSchema, verifyTwoFactorSchema } from '../schemas/auth.schema';
 
 const router = Router();
 
@@ -66,7 +70,7 @@ router.get('/health', (_req, res) => {
 });
 
 // ── Auth (public) ──────────────────────────────────────────────────────────
-router.post('/auth/login', loginLimiter, authController.login);
+router.post('/auth/login', loginLimiter, validateBody(loginSchema), authController.login);
 router.post('/auth/refresh', refreshLimiter, authController.refresh);
 router.get('/auth/password-policy', authController.passwordPolicy);
 router.get('/auth/setup-status', authController.setupStatus);
@@ -74,12 +78,12 @@ router.post('/auth/setup', loginLimiter, authController.completeSetup);
 // Completes a login bounced to the 2FA challenge — no access token yet, so
 // this has to stay public. loginLimiter caps guessing the code just like it
 // caps guessing the password.
-router.post('/auth/2fa/verify', loginLimiter, authController.verifyTwoFactor);
+router.post('/auth/2fa/verify', loginLimiter, validateBody(verifyTwoFactorSchema), authController.verifyTwoFactor);
 
 // ── Auth (authenticated; exempt from the must-change-password block) ───────
 router.post('/auth/logout', authenticateToken, authController.logout);
 router.get('/auth/me', authenticateToken, authController.me);
-router.post('/auth/change-password', authenticateToken, loginLimiter, authController.changePassword);
+router.post('/auth/change-password', authenticateToken, loginLimiter, validateBody(changePasswordSchema), authController.changePassword);
 
 // ── Auth (authenticated; self-service 2FA enrollment) ───────────────────────
 // Exempt from blockIfTwoFactorSetupRequired — this is where that requirement
@@ -104,14 +108,14 @@ router.get('/auth/permissions', auth, authController.myPermissions);
 
 // ── Domains ────────────────────────────────────────────────────────────────
 router.get('/domains', auth, requirePermission(PERMISSIONS.DOMAIN_READ), domainController.getDomains);
-router.post('/domains', auth, requirePermission(PERMISSIONS.DOMAIN_WRITE), domainController.createDomain);
+router.post('/domains', auth, requirePermission(PERMISSIONS.DOMAIN_WRITE), validateBody(createDomainSchema), domainController.createDomain);
 router.get('/domains/:id', auth, requirePermission(PERMISSIONS.DOMAIN_READ), domainController.getDomain);
-router.put('/domains/:id', auth, requirePermission(PERMISSIONS.DOMAIN_WRITE), domainController.updateDomain);
+router.put('/domains/:id', auth, requirePermission(PERMISSIONS.DOMAIN_WRITE), validateBody(updateDomainSchema), domainController.updateDomain);
 router.delete('/domains/:id', auth, requirePermission(PERMISSIONS.DOMAIN_DELETE), domainController.deleteDomain);
 
 // ── Scans ──────────────────────────────────────────────────────────────────
 router.get('/scans', auth, requirePermission(PERMISSIONS.DOMAIN_READ), scanController.getScans);
-router.post('/scans', auth, requirePermission(PERMISSIONS.SCAN_RUN), scanLimiter, scanController.createScan);
+router.post('/scans', auth, requirePermission(PERMISSIONS.SCAN_RUN), scanLimiter, validateBody(createScanSchema), scanController.createScan);
 router.get('/scans/:id', auth, requirePermission(PERMISSIONS.DOMAIN_READ), scanController.getScan);
 router.get('/scans/:id/findings', auth, requirePermission(PERMISSIONS.FINDING_READ), scanController.getScanFindings);
 router.delete('/scans/:id', auth, requirePermission(PERMISSIONS.SCAN_CANCEL), scanController.cancelScan);

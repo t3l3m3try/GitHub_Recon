@@ -40,6 +40,33 @@ export async function initializeDatabase() {
     await prisma.$queryRaw`SELECT 1`;
     logger.info('✅ Database connection successful');
 
+    // Configure SQLite PRAGMAs for high-concurrency read/write performance
+    try {
+      await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL;');
+      await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000;');
+      await prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL;');
+      logger.info('✅ SQLite configured: WAL mode, busy_timeout=5000ms, synchronous=NORMAL');
+    } catch (pragmaErr) {
+      logger.warn('Could not set SQLite PRAGMAs (non-fatal if non-SQLite):', pragmaErr);
+    }
+
+    // Reconcile interrupted/orphaned scans left in QUEUED or RUNNING from a prior crash or server restart
+    try {
+      const interrupted = await prisma.scan.updateMany({
+        where: { status: { in: ['QUEUED', 'RUNNING'] } },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          errorMessage: 'Scan interrupted by server restart'
+        }
+      });
+      if (interrupted.count > 0) {
+        logger.warn(`⚠️  Reconciled ${interrupted.count} interrupted scan(s) from prior session to FAILED`);
+      }
+    } catch (recErr) {
+      logger.warn('Could not reconcile orphaned scans:', recErr);
+    }
+
     // No account is ever auto-provisioned — accounts only come from the seed
     // script or an administrator. Just report whether the system is usable.
     const superAdmins = await prisma.user.count({ where: { role: 'SUPER_ADMIN', active: true } });

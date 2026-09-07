@@ -200,7 +200,18 @@ npm run db:seed      # ensure a super administrator exists (idempotent)
 npm run db:studio    # browse the data
 ```
 
+The database runs in SQLite **WAL (Write-Ahead Logging)** mode with busy timeout handling, enabling concurrent reads while scanner writes occur.
+
 The seed never overwrites an existing account. It only prints credentials when `SUPER_ADMIN_PASSWORD` was supplied; otherwise the newly created super admin has no password at all until the one-time setup screen sets one.
+
+## 🧪 Testing
+
+The backend includes an automated test suite with [Vitest](https://vitest.dev) covering regex detection patterns, entropy calculation, false positive suppression, criticality scoring formulas, committer email validation, and multi-tenant scoping:
+
+```bash
+cd backend
+npm test
+```
 
 ## 🤝 Contributing
 

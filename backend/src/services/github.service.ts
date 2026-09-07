@@ -99,17 +99,17 @@ const CORE_LIMITER = new Bottleneck({
   minTime: 500      // Decreased to speed up parallel blob fetching
 });
 
+// Process-wide in-memory LRU caches to save GitHub API quota across queries, scans, and server lifetime
+const GLOBAL_BLOB_CACHE = new Map<string, string>();
+const MAX_BLOB_CACHE_SIZE = 1000;
+
+const GLOBAL_COMMIT_DETAILS_CACHE = new Map<string, FileCommitDetails>();
+const MAX_COMMIT_CACHE_SIZE = 2000;
+
 class GitHubService {
   private octokit: Octokit;
   private limiter = SEARCH_LIMITER;
   private coreLimiter = CORE_LIMITER;
-
-  // In-memory caches to save GitHub API quota across queries and scans
-  private blobCache = new Map<string, string>();
-  private readonly MAX_BLOB_CACHE_SIZE = 1000;
-
-  private commitDetailsCache = new Map<string, FileCommitDetails>();
-  private readonly MAX_COMMIT_CACHE_SIZE = 2000;
 
   constructor(token: string) {
     this.octokit = new Octokit({
@@ -293,8 +293,8 @@ class GitHubService {
     repo: string,
     blobSha: string
   ): Promise<string> {
-    if (this.blobCache.has(blobSha)) {
-      return this.blobCache.get(blobSha)!;
+    if (GLOBAL_BLOB_CACHE.has(blobSha)) {
+      return GLOBAL_BLOB_CACHE.get(blobSha)!;
     }
 
     try {
@@ -311,11 +311,11 @@ class GitHubService {
         : response.data.content;
 
       // LRU cache eviction if size limit reached
-      if (this.blobCache.size >= this.MAX_BLOB_CACHE_SIZE) {
-        const firstKey = this.blobCache.keys().next().value;
-        if (firstKey) this.blobCache.delete(firstKey);
+      if (GLOBAL_BLOB_CACHE.size >= MAX_BLOB_CACHE_SIZE) {
+        const firstKey = GLOBAL_BLOB_CACHE.keys().next().value;
+        if (firstKey) GLOBAL_BLOB_CACHE.delete(firstKey);
       }
-      this.blobCache.set(blobSha, content);
+      GLOBAL_BLOB_CACHE.set(blobSha, content);
 
       return content;
     } catch (error) {
@@ -343,8 +343,8 @@ class GitHubService {
     perPage: number = 5
   ): Promise<FileCommitDetails> {
     const cacheKey = `${repository}:${filePath}:${perPage}`;
-    if (this.commitDetailsCache.has(cacheKey)) {
-      return this.commitDetailsCache.get(cacheKey)!;
+    if (GLOBAL_COMMIT_DETAILS_CACHE.has(cacheKey)) {
+      return GLOBAL_COMMIT_DETAILS_CACHE.get(cacheKey)!;
     }
 
     const result: FileCommitDetails = {
@@ -426,11 +426,11 @@ class GitHubService {
       }
 
       // Cache the result
-      if (this.commitDetailsCache.size >= this.MAX_COMMIT_CACHE_SIZE) {
-        const firstKey = this.commitDetailsCache.keys().next().value;
-        if (firstKey) this.commitDetailsCache.delete(firstKey);
+      if (GLOBAL_COMMIT_DETAILS_CACHE.size >= MAX_COMMIT_CACHE_SIZE) {
+        const firstKey = GLOBAL_COMMIT_DETAILS_CACHE.keys().next().value;
+        if (firstKey) GLOBAL_COMMIT_DETAILS_CACHE.delete(firstKey);
       }
-      this.commitDetailsCache.set(cacheKey, result);
+      GLOBAL_COMMIT_DETAILS_CACHE.set(cacheKey, result);
     } catch (error: any) {
       logger.warn(`Failed to fetch file commit details for ${repository}/${filePath}: ${error.message || error}`);
     }

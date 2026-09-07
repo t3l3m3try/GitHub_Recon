@@ -82,17 +82,6 @@ export default function Dashboard() {
     },
   });
 
-  // Fetch top emails filtered by domain
-  const { data: emailFindings } = useQuery({
-    queryKey: ['emails', selectedDomain, orgId],
-    queryFn: async () => {
-      const params: any = { type: 'EMAIL', limit: 10000 };
-      if (selectedDomain) params.domain = selectedDomain;
-      if (orgId) params.orgId = orgId;
-      const response = await findingsAPI.getAll(params);
-      return response.data;
-    },
-  });
 
   // Fetch critical + high findings filtered by domain
   const { data: criticalFindings } = useQuery({
@@ -170,37 +159,9 @@ export default function Dashboard() {
     return Object.values(macroMap).sort((a, b) => b.count - a.count);
   })();
 
-  // Extract and rank emails by frequency
-  const emailRanking = emailFindings?.findings?.reduce((acc: any, finding: any) => {
-    for (const secret of finding.secrets || []) {
-      if (secret.type !== 'EMAIL') continue;
-
-      // Use content if it's not a hash (no hashes contain @), otherwise use contentPreview as-is
-      let email = secret.content || '';
-      if (!email.includes('@')) {
-        email = secret.contentPreview || '';
-      }
-      if (!email) continue;
-
-      if (!acc[email]) {
-        acc[email] = { email, count: 0, repositories: new Set() };
-      }
-      acc[email].count++;
-      acc[email].repositories.add(finding.repository);
-    }
-    return acc;
-  }, {});
-
   // Unique email count comes from the backend stats (accurate, domain-filtered)
   const totalUniqueEmails = stats?.uniqueEmails ?? 0;
-
-  const topEmails = emailRanking
-    ? Object.values(emailRanking).map((item: any) => ({
-      email: item.email,
-      count: item.count,
-      repos: item.repositories.size
-    })).sort((a: any, b: any) => b.count - a.count).slice(0, 10)
-    : [];
+  const topEmails = stats?.topEmails || [];
 
   return (
     <div className="space-y-8">
@@ -570,7 +531,7 @@ export default function Dashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="text-gray-200 font-mono text-sm truncate">{item.email}</div>
                       <div className="text-gray-500 text-xs mt-1">
-                        Found in {item.repos} repositories
+                        {item.repos ? `Found in ${item.repos} repositories` : `${item.count} finding occurrence${item.count === 1 ? '' : 's'}`}
                       </div>
                     </div>
                   </div>
