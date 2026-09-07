@@ -52,6 +52,14 @@ const refreshLimiter = rateLimit({
   message: { error: 'Too many requests. Try again later.' },
 });
 
+const scanLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many scan creation requests. Please wait before launching another scan.' },
+});
+
 // Health check
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -71,7 +79,7 @@ router.post('/auth/2fa/verify', loginLimiter, authController.verifyTwoFactor);
 // ── Auth (authenticated; exempt from the must-change-password block) ───────
 router.post('/auth/logout', authenticateToken, authController.logout);
 router.get('/auth/me', authenticateToken, authController.me);
-router.post('/auth/change-password', authenticateToken, authController.changePassword);
+router.post('/auth/change-password', authenticateToken, loginLimiter, authController.changePassword);
 
 // ── Auth (authenticated; self-service 2FA enrollment) ───────────────────────
 // Exempt from blockIfTwoFactorSetupRequired — this is where that requirement
@@ -103,7 +111,7 @@ router.delete('/domains/:id', auth, requirePermission(PERMISSIONS.DOMAIN_DELETE)
 
 // ── Scans ──────────────────────────────────────────────────────────────────
 router.get('/scans', auth, requirePermission(PERMISSIONS.DOMAIN_READ), scanController.getScans);
-router.post('/scans', auth, requirePermission(PERMISSIONS.SCAN_RUN), scanController.createScan);
+router.post('/scans', auth, requirePermission(PERMISSIONS.SCAN_RUN), scanLimiter, scanController.createScan);
 router.get('/scans/:id', auth, requirePermission(PERMISSIONS.DOMAIN_READ), scanController.getScan);
 router.get('/scans/:id/findings', auth, requirePermission(PERMISSIONS.FINDING_READ), scanController.getScanFindings);
 router.delete('/scans/:id', auth, requirePermission(PERMISSIONS.SCAN_CANCEL), scanController.cancelScan);

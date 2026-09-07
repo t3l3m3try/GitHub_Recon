@@ -59,14 +59,27 @@ git remote set-url origin https://github.com/owner/repo.git
 
 If a token has been stored this way, rotate it — `.git/config` is easy to disclose accidentally through screenshots, screen sharing, support bundles or shell history.
 
-## Deployment
+## Deployment & Public Internet Hardening
 
-- Set `JWT_SECRET` and `TWO_FACTOR_ENCRYPTION_KEY` to at least 32 random characters each. The application refuses to start in production without either and never falls back to a built-in default.
-- Set `NODE_ENV=production` to enable `Secure` cookies.
-- Set `FRONTEND_URL` to your actual origin. Credentialed CORS cannot use a wildcard.
-- Terminate TLS in front of the application. Refresh cookies and access tokens are bearer credentials.
-- Scope the GitHub token to `public_repo` and `read:user` only. It needs no write access.
-- Back up the database encrypted, and restrict filesystem access to it.
+For public internet deployment, ensure the following checklist is met:
+
+1. **Secrets & Keys:**
+   - Set `JWT_SECRET` and `TWO_FACTOR_ENCRYPTION_KEY` to at least 32 cryptographically random characters each. The server strictly refuses to start in `production` without both.
+   - Restrict the GitHub Personal Access Token (`GITHUB_TOKEN`) to `public_repo` and `read:user` permissions only. Never assign administrative or repo write privileges.
+2. **Environment & Cookies:**
+   - Set `NODE_ENV=production` so that session refresh cookies are marked `Secure`, error stacks are stripped from 500 responses, and dev overrides are blocked.
+   - Set `FRONTEND_URL` to your exact public frontend domain(s) (supports comma-separated list for multi-domain setups). Wildcards are disallowed when credentials are exchanged.
+3. **Network & TLS:**
+   - Terminate TLS (HTTPS) via a trusted reverse proxy (e.g., Nginx, Caddy, Cloudflare). Access tokens and refresh cookies are bearer credentials that must never traverse unencrypted networks.
+   - If behind a reverse proxy, ensure `trust proxy` is configured in Express or the proxy strips spoofed `X-Forwarded-For` headers so IP-based rate limiting cannot be bypassed.
+4. **Rate Limiting & Anti-DoS:**
+   - Global API rate limiter (`apiLimiter`: 600 req / 15 min per IP) protects general endpoints against resource exhaustion.
+   - Credential rate limiter (`loginLimiter`: 30 failed attempts / 15 min per IP) protects `/auth/login`, `/auth/setup`, `/auth/change-password`, and `/auth/2fa/verify`.
+   - Scan burst limiter (`scanLimiter`: 10 scans / 15 min) prevents GitHub API quota exhaustion from repeated scan launches.
+   - Query pagination parameters (`page`, `limit`) are clamped on both scans and findings endpoints to avoid oversized queries or memory exhaustion.
+5. **Content Security & Injection Safeguards:**
+   - Frontend rendering uses zero raw HTML injection (`dangerouslySetInnerHTML` is eliminated across the entire application). Search highlights use safe React JSX nodes (`<mark>`).
+   - SQLite database (`dev.db`) contains plaintext findings and secret matches; file system access must be restricted (`chmod 600 dev.db`), and automated backups must be encrypted at rest.
 
 ## Threat model boundaries
 
@@ -75,5 +88,5 @@ The following are explicitly **not** covered:
 - **Only TOTP** is supported for 2FA — no WebAuthn/hardware security keys, and no SMS or email codes.
 - **Password history** is not retained; a user may reuse a previous password.
 - **The super administrator has no self-service recovery.** If the last super administrator password is lost, it must be reset directly against the database.
-- **SQLite** suits a single-node deployment. Concurrent multi-node writes require migrating to a networked database.
-- **Rate limiting is per-process and in-memory**; behind multiple instances it must move to a shared store.
+- **SQLite** suits a single-node deployment. Concurrent multi-node writes require migrating to a networked database (e.g., PostgreSQL).
+- **Rate limiting is per-process and in-memory**; behind multiple instances it should move to a shared Redis store.

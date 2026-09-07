@@ -55,7 +55,8 @@ export async function getFindings(req: Request, res: Response) {
       verified,
       falsePositive,
       search,
-      scanId
+      scanId,
+      committer
     } = req.query;
 
     if (!userId) {
@@ -112,19 +113,40 @@ export async function getFindings(req: Request, res: Response) {
       where.falsePositive = falsePositive === 'true';
     }
 
-    if (search) {
-      where.OR = [
-        { repository: { contains: search as string } },
-        { filePath: { contains: search as string } },
+    const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(String(limit), 10) || 50));
+
+    if (committer) {
+      where.AND = [
+        ...(where.AND || []),
         {
-          secrets: {
-            some: {
-              OR: [
-                { content: { contains: search as string } },
-                { context: { contains: search as string } }
-              ]
+          OR: [
+            { committerEmail: { contains: committer as string } },
+            { committers: { some: { email: { contains: committer as string } } } }
+          ]
+        }
+      ];
+    }
+
+    if (search) {
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { repository: { contains: search as string } },
+            { filePath: { contains: search as string } },
+            { committerEmail: { contains: search as string } },
+            {
+              secrets: {
+                some: {
+                  OR: [
+                    { content: { contains: search as string } },
+                    { context: { contains: search as string } }
+                  ]
+                }
+              }
             }
-          }
+          ]
         }
       ];
     }
@@ -133,7 +155,7 @@ export async function getFindings(req: Request, res: Response) {
       where.scanId = scanId as string;
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const [findings, total] = await Promise.all([
       prisma.finding.findMany({
@@ -148,11 +170,12 @@ export async function getFindings(req: Request, res: Response) {
               }
             }
           },
-          secrets: true
+          secrets: true,
+          committers: true
         },
         orderBy: { score: 'desc' },
         skip,
-        take: Number(limit)
+        take: limitNum
       }),
       prisma.finding.count({ where })
     ]);
@@ -160,10 +183,10 @@ export async function getFindings(req: Request, res: Response) {
     res.json({
       findings,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error: any) {
@@ -198,7 +221,8 @@ export async function getFinding(req: Request, res: Response) {
             }
           }
         },
-        secrets: true
+        secrets: true,
+        committers: true
       }
     });
 
@@ -389,12 +413,12 @@ export async function exportFindings(req: Request, res: Response) {
 
     const header = [
       'organization', 'domain', 'criticality', 'score', 'primaryType', 'repository', 'filePath',
-      'fileUrl', 'commitDate', 'verified', 'falsePositive', 'acknowledged', 'secretCount', 'secretTypes',
+      'committerEmail', 'fileUrl', 'commitDate', 'verified', 'falsePositive', 'acknowledged', 'secretCount', 'secretTypes',
     ];
 
     const rows = findings.map(f => [
       f.scan?.domain?.organization?.name, f.scan?.domain?.name, f.criticality, f.score, f.primaryType, f.repository, f.filePath,
-      f.fileUrl, f.commitDate?.toISOString() ?? '', f.verified, f.falsePositive, f.acknowledged,
+      f.committerEmail ?? '', f.fileUrl, f.commitDate?.toISOString() ?? '', f.verified, f.falsePositive, f.acknowledged,
       f.secrets.length, Array.from(new Set(f.secrets.map(s => s.type))).join(' '),
     ].map(escape).join(','));
 
@@ -448,6 +472,8 @@ export async function getStatistics(req: Request, res: Response) {
       uniqueEmailGroups,
       uniqueRepositoriesGroups,
       uniqueFilesGroups,
+      topCommitters,
+      uniqueCommittersGroups,
       orgBreakdownRows
     ] = await Promise.all([
       prisma.finding.groupBy({
@@ -497,6 +523,19 @@ export async function getStatistics(req: Request, res: Response) {
       prisma.finding.groupBy({
         by: ['filePath'],
         where: baseWhere
+      }),
+      // Top committers by findings count
+      prisma.finding.groupBy({
+        by: ['committerEmail'],
+        where: { ...baseWhere, committerEmail: { not: null } },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 10
+      }),
+      // Total unique committers
+      prisma.finding.groupBy({
+        by: ['committerEmail'],
+        where: { ...baseWhere, committerEmail: { not: null } }
       }),
       // Per-organization totals, only computed for the unscoped all-orgs view
       wantsOrgBreakdown
@@ -548,10 +587,15 @@ export async function getStatistics(req: Request, res: Response) {
         filePath: item.filePath,
         count: item._count.id
       })),
+      topCommitters: topCommitters.map((item: any) => ({
+        email: item.committerEmail,
+        count: item._count.id
+      })),
       uniqueEmails: uniqueEmailGroups.length,
       uniqueFindingTypes: byType.length,
       uniqueRepositories: uniqueRepositoriesGroups.length,
       uniqueFiles: uniqueFilesGroups.length,
+      uniqueCommitters: uniqueCommittersGroups.length,
       byOrganization: (orgBreakdownRows as any[]).map((row) => ({
         orgId: row.orgId,
         orgName: row.orgName,
@@ -566,3 +610,4 @@ export async function getStatistics(req: Request, res: Response) {
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 }
+

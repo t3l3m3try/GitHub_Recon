@@ -247,6 +247,14 @@ export interface Finding {
   commitUrl?: string;
   fileUrl?: string;
   commitDate?: string;
+  committerEmail?: string;
+  committers?: Array<{
+    id: string;
+    email: string;
+    name?: string;
+    commitSha?: string;
+    commitDate?: string;
+  }>;
   verified: boolean;
   falsePositive: boolean;
   acknowledged: boolean;

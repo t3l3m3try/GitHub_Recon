@@ -1,7 +1,23 @@
 import { Octokit } from '@octokit/rest';
 import Bottleneck from 'bottleneck';
+import https from 'https';
 import { logger } from '../utils/logger';
+import { isValidCommitterEmail, cleanCommitterEmail } from '../utils/committerValidator';
 
+export interface ExtractedCommitter {
+  email: string;
+  name?: string;
+  commitSha?: string;
+  commitDate?: Date;
+}
+
+export interface FileCommitDetails {
+  commitDate?: Date;
+  commitSha?: string;
+  commitUrl?: string;
+  primaryEmail?: string;
+  committers: ExtractedCommitter[];
+}
 
 /**
  * GitHub Service
@@ -18,6 +34,8 @@ export interface SearchResult {
   commitSha?: string;
   commitUrl?: string;
   commitDate?: Date;
+  committerEmail?: string;
+  committers?: ExtractedCommitter[];
   branch?: string;
 }
 
@@ -86,10 +104,22 @@ class GitHubService {
   private limiter = SEARCH_LIMITER;
   private coreLimiter = CORE_LIMITER;
 
+  // In-memory caches to save GitHub API quota across queries and scans
+  private blobCache = new Map<string, string>();
+  private readonly MAX_BLOB_CACHE_SIZE = 1000;
+
+  private commitDetailsCache = new Map<string, FileCommitDetails>();
+  private readonly MAX_COMMIT_CACHE_SIZE = 2000;
+
   constructor(token: string) {
     this.octokit = new Octokit({
       auth: token,
-      userAgent: 'GitHub-CTI-Monitor/1.0'
+      userAgent: 'GitHub-CTI-Monitor/1.0',
+      request: {
+        headers: {
+          accept: 'application/vnd.github+json'
+        }
+      }
     });
   }
 
@@ -263,6 +293,10 @@ class GitHubService {
     repo: string,
     blobSha: string
   ): Promise<string> {
+    if (this.blobCache.has(blobSha)) {
+      return this.blobCache.get(blobSha)!;
+    }
+
     try {
       const response = await this.coreLimiter.schedule(() =>
         this.octokit.rest.git.getBlob({
@@ -272,48 +306,387 @@ class GitHubService {
         })
       );
 
-      if (response.data.encoding === 'base64') {
-        return Buffer.from(response.data.content, 'base64').toString('utf-8');
+      const content = response.data.encoding === 'base64'
+        ? Buffer.from(response.data.content, 'base64').toString('utf-8')
+        : response.data.content;
+
+      // LRU cache eviction if size limit reached
+      if (this.blobCache.size >= this.MAX_BLOB_CACHE_SIZE) {
+        const firstKey = this.blobCache.keys().next().value;
+        if (firstKey) this.blobCache.delete(firstKey);
       }
-      return response.data.content;
+      this.blobCache.set(blobSha, content);
+
+      return content;
     } catch (error) {
       logger.error(`Error fetching blob ${blobSha} from ${owner}/${repo}:`, error);
       return '';
     }
   }
 
-
-
   /**
    * Get the last commit date for a specific file path
    * Uses Core API limiter (not search) — safe to call per-finding
    */
   async getFileLastCommitDate(repository: string, filePath: string): Promise<Date | undefined> {
+    const details = await this.getFileCommitDetails(repository, filePath, 1);
+    return details.commitDate;
+  }
+
+  /**
+   * Get commit details and all valid committers for a specific file path
+   * Uses Core API limiter. Extracts commit SHA, date, and valid committer emails.
+   */
+  async getFileCommitDetails(
+    repository: string,
+    filePath: string,
+    perPage: number = 5
+  ): Promise<FileCommitDetails> {
+    const cacheKey = `${repository}:${filePath}:${perPage}`;
+    if (this.commitDetailsCache.has(cacheKey)) {
+      return this.commitDetailsCache.get(cacheKey)!;
+    }
+
+    const result: FileCommitDetails = {
+      committers: []
+    };
+
     try {
       const [owner, repo] = repository.split('/');
+      if (!owner || !repo) return result;
+
       const response = await this.coreLimiter.schedule(() =>
         this.octokit.rest.repos.listCommits({
           owner,
           repo,
           path: filePath,
-          per_page: 1
+          per_page: perPage
         })
       );
-      if (response.data.length > 0) {
-        const commit = response.data[0];
-        const dateStr = commit.commit.committer?.date || commit.commit.author?.date;
+
+      if (response.data && response.data.length > 0) {
+        const latestCommit = response.data[0];
+        result.commitSha = latestCommit.sha;
+        result.commitUrl = latestCommit.html_url;
+
+        const dateStr = latestCommit.commit.committer?.date || latestCommit.commit.author?.date;
         if (dateStr) {
-          const date = new Date(dateStr);
-          logger.info(`File date fetched: ${repository}/${filePath} → ${date.toISOString()}`);
-          return date;
+          result.commitDate = new Date(dateStr);
+        }
+
+        const seenEmails = new Set<string>();
+
+        for (const item of response.data) {
+          const itemSha = item.sha;
+          const itemDateStr = item.commit.committer?.date || item.commit.author?.date;
+          const itemDate = itemDateStr ? new Date(itemDateStr) : undefined;
+
+          // Check committer
+          const rawCommitterEmail = item.commit.committer?.email;
+          const committerName = item.commit.committer?.name;
+          if (isValidCommitterEmail(rawCommitterEmail)) {
+            const cleaned = cleanCommitterEmail(rawCommitterEmail)!;
+            if (!seenEmails.has(cleaned)) {
+              seenEmails.add(cleaned);
+              result.committers.push({
+                email: cleaned,
+                name: committerName,
+                commitSha: itemSha,
+                commitDate: itemDate
+              });
+              if (!result.primaryEmail) {
+                result.primaryEmail = cleaned;
+              }
+            }
+          }
+
+          // Check author
+          const rawAuthorEmail = item.commit.author?.email;
+          const authorName = item.commit.author?.name;
+          if (isValidCommitterEmail(rawAuthorEmail)) {
+            const cleaned = cleanCommitterEmail(rawAuthorEmail)!;
+            if (!seenEmails.has(cleaned)) {
+              seenEmails.add(cleaned);
+              result.committers.push({
+                email: cleaned,
+                name: authorName,
+                commitSha: itemSha,
+                commitDate: itemDate
+              });
+              if (!result.primaryEmail) {
+                result.primaryEmail = cleaned;
+              }
+            }
+          }
+        }
+
+        logger.info(
+          `File commit details fetched for ${repository}/${filePath}: ${result.committers.length} committer(s), primary: ${result.primaryEmail || 'none'}`
+        );
+      }
+
+      // Cache the result
+      if (this.commitDetailsCache.size >= this.MAX_COMMIT_CACHE_SIZE) {
+        const firstKey = this.commitDetailsCache.keys().next().value;
+        if (firstKey) this.commitDetailsCache.delete(firstKey);
+      }
+      this.commitDetailsCache.set(cacheKey, result);
+    } catch (error: any) {
+      logger.warn(`Failed to fetch file commit details for ${repository}/${filePath}: ${error.message || error}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Fetch a commit patch directly via HTTP GET without using GitHub API rate limit quota.
+   * Parses the From: header and signed-off trailers to extract committer and author email.
+   */
+  async fetchCommitPatch(repository: string, commitSha: string): Promise<ExtractedCommitter[]> {
+    return new Promise((resolve) => {
+      const url = `https://github.com/${repository}/commit/${commitSha}.patch`;
+      const req = https.get(
+        url,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+          }
+        },
+        (res) => {
+          if (res.statusCode !== 200) {
+            resolve([]);
+            return;
+          }
+
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+            // Committer header is at the top of the patch; if we exceed 10KB, we have enough metadata
+            if (data.length > 10000) {
+              res.destroy();
+            }
+          });
+
+          res.on('close', () => {
+            const committers = this.parsePatchForCommitter(data, commitSha);
+            resolve(committers);
+          });
+
+          res.on('end', () => {
+            const committers = this.parsePatchForCommitter(data, commitSha);
+            resolve(committers);
+          });
+        }
+      );
+
+      req.on('error', (err) => {
+        logger.debug(`Error fetching patch for ${repository}/commit/${commitSha}: ${err.message}`);
+        resolve([]);
+      });
+
+      req.setTimeout(5000, () => {
+        req.destroy();
+        resolve([]);
+      });
+    });
+  }
+
+  /**
+   * Parse email and author name from raw git patch text
+   */
+  parsePatchForCommitter(patchText: string, commitSha?: string): ExtractedCommitter[] {
+    const results: ExtractedCommitter[] = [];
+    const seen = new Set<string>();
+
+    // Match "From: Full Name <email@domain.com>"
+    const fromMatch = patchText.match(/^From:\s+([^<]+)<([^>]+)>/m);
+    if (fromMatch) {
+      const name = fromMatch[1].trim();
+      const email = fromMatch[2].trim();
+      if (isValidCommitterEmail(email)) {
+        const cleaned = cleanCommitterEmail(email)!;
+        seen.add(cleaned);
+        results.push({ email: cleaned, name, commitSha });
+      }
+    }
+
+    // Match "Signed-off-by: Full Name <email@domain.com>" or "Co-authored-by: ..."
+    const trailerRegex = /^(?:Signed-off-by|Co-authored-by):\s+([^<]+)<([^>]+)>/gim;
+    let match: RegExpExecArray | null;
+    while ((match = trailerRegex.exec(patchText)) !== null) {
+      const name = match[1].trim();
+      const email = match[2].trim();
+      if (isValidCommitterEmail(email)) {
+        const cleaned = cleanCommitterEmail(email)!;
+        if (!seen.has(cleaned)) {
+          seen.add(cleaned);
+          results.push({ email: cleaned, name, commitSha });
         }
       }
-      logger.warn(`No commit date found for ${repository}/${filePath}`);
-      return undefined;
-    } catch (error: any) {
-      logger.warn(`Failed to fetch file date for ${repository}/${filePath}: ${error.message || error}`);
-      return undefined; // Non-fatal — just skip the date
     }
+
+    return results;
+  }
+
+  /**
+   * Batched GraphQL query for file committers across multiple files.
+   * Resolves up to 15 files in a SINGLE GraphQL request (1 rate limit point).
+   */
+  async batchGetFilesCommittersGraphQL(
+    files: Array<{ repository: string; filePath: string }>
+  ): Promise<Map<string, FileCommitDetails>> {
+    const resultsMap = new Map<string, FileCommitDetails>();
+    if (files.length === 0) return resultsMap;
+
+    const queryParts: string[] = [];
+    const validItems: Array<{ alias: string; repo: string; owner: string; name: string; path: string }> = [];
+
+    files.forEach((item, index) => {
+      const [owner, name] = item.repository.split('/');
+      if (!owner || !name || !item.filePath) return;
+      const alias = `f${index}`;
+      validItems.push({ alias, repo: item.repository, owner, name, path: item.filePath });
+
+      const escapedOwner = JSON.stringify(owner);
+      const escapedName = JSON.stringify(name);
+      const escapedPath = JSON.stringify(item.filePath);
+
+      queryParts.push(`
+        ${alias}: repository(owner: ${escapedOwner}, name: ${escapedName}) {
+          defaultBranchRef {
+            target {
+              ... on Commit {
+                history(first: 5, path: ${escapedPath}) {
+                  nodes {
+                    oid
+                    committedDate
+                    author { name email }
+                    committer { name email }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `);
+    });
+
+    if (queryParts.length === 0) return resultsMap;
+
+    const query = `query {\n${queryParts.join('\n')}\n}`;
+
+    try {
+      const response: any = await this.coreLimiter.schedule(() =>
+        this.octokit.graphql(query)
+      );
+
+      if (response) {
+        for (const item of validItems) {
+          const key = `${item.repo}:${item.path}`;
+          const repoData = response[item.alias];
+          const historyNodes = repoData?.defaultBranchRef?.target?.history?.nodes;
+
+          if (Array.isArray(historyNodes) && historyNodes.length > 0) {
+            const committers: ExtractedCommitter[] = [];
+            const seenEmails = new Set<string>();
+            let primaryEmail: string | undefined;
+
+            const latestNode = historyNodes[0];
+            const commitSha = latestNode.oid;
+            const commitDate = latestNode.committedDate ? new Date(latestNode.committedDate) : undefined;
+            const commitUrl = `https://github.com/${item.repo}/commit/${commitSha}`;
+
+            for (const node of historyNodes) {
+              const nodeSha = node.oid;
+              const nodeDate = node.committedDate ? new Date(node.committedDate) : undefined;
+
+              if (isValidCommitterEmail(node.committer?.email)) {
+                const cleaned = cleanCommitterEmail(node.committer.email)!;
+                if (!seenEmails.has(cleaned)) {
+                  seenEmails.add(cleaned);
+                  committers.push({
+                    email: cleaned,
+                    name: node.committer.name,
+                    commitSha: nodeSha,
+                    commitDate: nodeDate
+                  });
+                  if (!primaryEmail) primaryEmail = cleaned;
+                }
+              }
+
+              if (isValidCommitterEmail(node.author?.email)) {
+                const cleaned = cleanCommitterEmail(node.author.email)!;
+                if (!seenEmails.has(cleaned)) {
+                  seenEmails.add(cleaned);
+                  committers.push({
+                    email: cleaned,
+                    name: node.author.name,
+                    commitSha: nodeSha,
+                    commitDate: nodeDate
+                  });
+                  if (!primaryEmail) primaryEmail = cleaned;
+                }
+              }
+            }
+
+            resultsMap.set(key, {
+              commitSha,
+              commitDate,
+              commitUrl,
+              primaryEmail,
+              committers
+            });
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.data) {
+        for (const item of validItems) {
+          const key = `${item.repo}:${item.path}`;
+          const repoData = error.data[item.alias];
+          const historyNodes = repoData?.defaultBranchRef?.target?.history?.nodes;
+          if (Array.isArray(historyNodes) && historyNodes.length > 0) {
+            const committers: ExtractedCommitter[] = [];
+            const seenEmails = new Set<string>();
+            let primaryEmail: string | undefined;
+
+            const latestNode = historyNodes[0];
+            const commitSha = latestNode.oid;
+            const commitDate = latestNode.committedDate ? new Date(latestNode.committedDate) : undefined;
+            const commitUrl = `https://github.com/${item.repo}/commit/${commitSha}`;
+
+            for (const node of historyNodes) {
+              const nodeSha = node.oid;
+              const nodeDate = node.committedDate ? new Date(node.committedDate) : undefined;
+
+              if (isValidCommitterEmail(node.committer?.email)) {
+                const cleaned = cleanCommitterEmail(node.committer.email)!;
+                if (!seenEmails.has(cleaned)) {
+                  seenEmails.add(cleaned);
+                  committers.push({ email: cleaned, name: node.committer.name, commitSha: nodeSha, commitDate: nodeDate });
+                  if (!primaryEmail) primaryEmail = cleaned;
+                }
+              }
+
+              if (isValidCommitterEmail(node.author?.email)) {
+                const cleaned = cleanCommitterEmail(node.author.email)!;
+                if (!seenEmails.has(cleaned)) {
+                  seenEmails.add(cleaned);
+                  committers.push({ email: cleaned, name: node.author.name, commitSha: nodeSha, commitDate: nodeDate });
+                  if (!primaryEmail) primaryEmail = cleaned;
+                }
+              }
+            }
+
+            resultsMap.set(key, { commitSha, commitDate, commitUrl, primaryEmail, committers });
+          }
+        }
+      } else {
+        logger.warn(`GraphQL batch error for ${files.length} files: ${error.message || error}`);
+      }
+    }
+
+    return resultsMap;
   }
 
   /**

@@ -12,10 +12,14 @@ Reference: https://t3l3m3try.medium.com/github-recon-find-secrets-on-github-6b7b
 - **Comprehensive scanning** — searches code, commit messages and issues across public repositories, forks and wikis.
 - **280 secret types across 349 detection patterns** — AWS, GitHub, GitLab, cloud providers, payment processors, AI/ML services, databases, private keys and more. Every regex, its entropy threshold and its severity weight are browsable in the UI.
 - **247 configurable search queries** — every GitHub search the scanner performs is listed, grouped and individually switchable. Turn off what you don't need and scans get proportionally cheaper.
+- **Committer Intelligence** — extracts commit authors directly from file commit history during scanning, validates emails against RFC 5322 standards, discards bots and `@users.noreply.github.com` handles, and links them to findings.
+- **Top Committers Line & Bar Analytics** — interactive SOC dashboard charts ranking top committers, repositories, and files with one-click filtering into findings.
+- **Exact Line Anchoring** — direct GitHub links point to the exact code line (`#L{lineNumber}`) where the secret was detected.
+- **Token & API Quota Optimization** — in-memory LRU caching of file blobs and commit trees drastically cuts GitHub Core API calls across queries and repository forks.
 - **Intelligent scoring** — findings are ranked CRITICAL → INFO using entropy analysis, surrounding context, commit recency and file type, so the noise sinks. The full 0-100 formula is published in the UI rather than hidden in the code.
 - **Multi-tenancy** — organizations keep their data separate. Members see their own organization's domains and findings and nothing else.
 - **Role-based access control** — four roles plus per-user permission overrides, all administered from the UI.
-- **Secure authentication** — bcrypt password hashing, short-lived access tokens, rotating refresh tokens in httpOnly cookies, account lockout and an audit trail. See [SECURITY.md](SECURITY.md).
+- **Secure authentication & rate limiting** — bcrypt password hashing, short-lived access tokens, rotating refresh tokens in httpOnly cookies, brute-force IP rate limiters, scan burst limiters, and audit logging. See [SECURITY.md](SECURITY.md).
 - **Two-factor authentication (TOTP)** — any user can add it from their account settings; super admins can mandate, disable or reset it for anyone, org admins for their own organization's users.
 - **SOC-style dashboard** — dark-mode analytics, triage and reporting.
 

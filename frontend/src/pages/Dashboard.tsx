@@ -148,6 +148,7 @@ export default function Dashboard() {
 
   const topRepos = stats?.topRepositories?.slice(0, 10) || [];
   const topFiles = stats?.topFiles?.slice(0, 10) || [];
+  const topCommitters = stats?.topCommitters?.slice(0, 10) || [];
   const byOrganization = stats?.byOrganization || [];
   const topTypes = (() => {
     if (!stats?.byType) return [];
@@ -668,8 +669,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Top Repositories and Top Files */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Top Repositories, Top Files, and Top Committers */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 lg:grid-cols-2 gap-6">
         {/* Top Repositories */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -788,6 +789,72 @@ export default function Dashboard() {
                   <linearGradient id="colorGradientFiles" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
                     <stop offset="100%" stopColor="#3B82F6" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              NO DATA AVAILABLE
+            </div>
+          )}
+        </div>
+
+        {/* Top Committers */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-200">Top Committers</h3>
+            {stats?.uniqueCommitters > 0 && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                <span className="text-sm font-bold text-blue-400">{stats.uniqueCommitters}</span>
+                <span className="text-xs text-gray-400">unique</span>
+              </span>
+            )}
+          </div>
+          {topCommitters.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={topCommitters} layout="vertical" margin={{ left: 20 }}>
+                <XAxis
+                  type="number"
+                  stroke="#4B5563"
+                  tick={{ fill: '#9CA3AF', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}
+                  axisLine={{ stroke: '#374151', strokeWidth: 1 }}
+                />
+                <YAxis
+                  dataKey="email"
+                  type="category"
+                  width={150}
+                  stroke="#4B5563"
+                  tick={{ fill: '#D1D5DB', fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }}
+                  axisLine={{ stroke: '#374151', strokeWidth: 1 }}
+                  style={{ cursor: 'pointer' }}
+                  tickFormatter={(val: string) => (val && val.length > 20 ? val.slice(0, 18) + '…' : val)}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1F2937',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    fontFamily: 'JetBrains Mono, monospace',
+                    color: '#F9FAFB',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    fontSize: '12px',
+                  }}
+                  cursor={{ fill: 'rgba(59, 130, 246, 0.06)' }}
+                  formatter={(value: any) => [value, 'Count']}
+                  labelFormatter={(label: any) => `Committer: ${label}`}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="url(#colorGradientCommitters)"
+                  radius={[0, 6, 6, 0]}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(data: any) => navigate(`/findings?search=${encodeURIComponent(data.email)}${selectedDomain ? `&domain=${encodeURIComponent(selectedDomain)}` : ''}`)}
+                />
+                <defs>
+                  <linearGradient id="colorGradientCommitters" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#EC4899" stopOpacity={1} />
                   </linearGradient>
                 </defs>
               </BarChart>

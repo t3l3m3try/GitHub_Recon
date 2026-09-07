@@ -205,6 +205,7 @@ model Finding {
   commitSha      String?
   commitUrl      String?
   commitDate     DateTime?
+  committerEmail String?      // Primary/latest valid committer email
   gistId         String?
   issueNumber    Int?
   score          Float        @default(0) // Criticality score 0-100 (File-level aggregate)
@@ -215,6 +216,7 @@ model Finding {
   acknowledged   Boolean      @default(false)
   notes          String?
   secrets        Secret[]     // One file can have many secrets
+  committers     FindingCommitter[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -222,7 +224,23 @@ model Finding {
   @@index([primaryType])
   @@index([criticality])
   @@index([repository])
+  @@index([committerEmail])
   @@index([verified, falsePositive])
+}
+
+model FindingCommitter {
+  id         String    @id @default(uuid())
+  findingId  String
+  finding    Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  email      String
+  name       String?
+  commitSha  String?
+  commitDate DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([findingId, email])
+  @@index([findingId])
+  @@index([email])
 }
 
 model Secret {

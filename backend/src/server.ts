@@ -17,16 +17,42 @@ dotenv.config(); // fallback: backend/.env
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+import rateLimit from 'express-rate-limit';
+
 // Trust the first proxy hop so rate limiting and audit logs see the real client IP
 app.set('trust proxy', 1);
 
 // Middleware
 app.use(helmet());
+
+// Flexible multi-origin CORS support for production deployments
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 app.use(cors({
-  // Credentials mode forbids a wildcard origin — the refresh cookie needs an explicit one
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy: origin not allowed'));
+    }
+  },
   credentials: true
 }));
+
+// Global API rate limiter — protects public deployment against volumetric denial of service
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.API_RATE_LIMIT_MAX) || 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this address. Please try again later.' },
+});
+
+app.use('/api', apiLimiter);
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
@@ -39,12 +65,15 @@ app.use(morgan('combined', {
 // Routes
 app.use('/api', routes);
 
-// Error handling middleware
+// Error handling middleware — sanitized for production security
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error('Unhandled error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
+  const status = typeof err.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+  const message = process.env.NODE_ENV === 'production' && status === 500
+    ? 'Internal server error'
+    : (err.message || 'Internal server error');
+
+  res.status(status).json({ error: message });
 });
 
 // Start server
@@ -52,6 +81,10 @@ app.listen(PORT, async () => {
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`API: http://localhost:${PORT}/api`);
+
+  if (!process.env.GITHUB_TOKEN) {
+    logger.warn('⚠️ GITHUB_TOKEN is not set in environment. GitHub API rate limits will be restricted.');
+  }
 
   // Fail fast at boot if the signing secret is missing in production, rather
   // than at the first login attempt.

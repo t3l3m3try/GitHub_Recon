@@ -118,7 +118,10 @@ export async function getScans(req: Request, res: Response) {
       where.status = status as string;
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 20));
+
+    const skip = (pageNum - 1) * limitNum;
 
     const [scans, total] = await Promise.all([
       prisma.scan.findMany({
@@ -132,7 +135,7 @@ export async function getScans(req: Request, res: Response) {
         },
         orderBy: { createdAt: 'desc' },
         skip,
-        take: Number(limit)
+        take: limitNum
       }),
       prisma.scan.count({ where })
     ]);
@@ -158,10 +161,10 @@ export async function getScans(req: Request, res: Response) {
     res.json({
       scans: annotatedScans,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error: any) {
@@ -271,14 +274,17 @@ export async function getScanFindings(req: Request, res: Response) {
       where.falsePositive = falsePositive === 'true';
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(String(limit), 10) || 50));
+
+    const skip = (pageNum - 1) * limitNum;
 
     const [findings, total] = await Promise.all([
       prisma.finding.findMany({
         where,
         orderBy: { score: 'desc' },
         skip,
-        take: Number(limit)
+        take: limitNum
       }),
       prisma.finding.count({ where })
     ]);
@@ -286,10 +292,10 @@ export async function getScanFindings(req: Request, res: Response) {
     res.json({
       findings,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error: any) {

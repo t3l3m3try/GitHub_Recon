@@ -15,6 +15,7 @@ import {
   resolveQueriesForTarget
 } from './queryPreferences.service';
 import { logger } from '../utils/logger';
+import { isValidCommitterEmail, cleanCommitterEmail } from '../utils/committerValidator';
 import crypto from 'crypto';
 
 /**
@@ -361,12 +362,6 @@ class ScannerService {
             const credentialPairs = this.detectCredentialPairs(result.content, domain);
             const allSecrets = [...secrets, ...credentialPairs];
 
-            // Fetch file's last commit date only when secrets are found (saves API quota)
-            let fileCommitDate: Date | undefined;
-            if (allSecrets.length > 0) {
-              fileCommitDate = await this.githubService.getFileLastCommitDate(result.repository, result.filePath);
-            }
-
             const validSecrets = [];
             for (const secret of allSecrets) {
               const contentHash = this.hashContent(secret.content + result.repository + result.filePath);
@@ -395,11 +390,18 @@ class ScannerService {
                 criticality = scoreToCriticality(score);
               }
 
+              // Compute exact 1-based line number where the secret was detected in file content
+              let lineNumber: number | undefined;
+              if (typeof secret.matchIndex === 'number' && result.content) {
+                lineNumber = result.content.substring(0, secret.matchIndex).split('\n').length;
+              }
+
               validSecrets.push({
                 type: secret.type,
                 content: secret.content,
                 contentPreview: createPreview(secret.content),
                 context,
+                lineNumber,
                 score,
                 criticality
               });
@@ -409,26 +411,51 @@ class ScannerService {
 
             const { score: fileScore, primaryType, criticality: fileCriticality } = calculateFileCriticalityScore(validSecrets);
 
+            // Anchor fileUrl to the primary (highest scoring) secret's line number
+            const primarySecret = validSecrets.reduce((prev, curr) => curr.score > prev.score ? curr : prev, validSecrets[0]);
+            const primaryLine = primarySecret?.lineNumber;
+            const anchoredFileUrl = result.htmlUrl
+              ? (primaryLine ? `${result.htmlUrl.split('#')[0]}#L${primaryLine}` : result.htmlUrl)
+              : undefined;
+
+            // Fetch file's commit details and committer emails during the scan for each detected file
+            let commitDetails: any = null;
+            try {
+              commitDetails = await this.githubService.getFileCommitDetails(result.repository, result.filePath);
+            } catch (commitErr) {
+              logger.warn(`Failed to fetch committer details during scan for ${result.repository}/${result.filePath}:`, commitErr);
+            }
+
             const finding = await prisma.finding.create({
               data: {
                 scanId,
                 repository: result.repository,
                 repositoryUrl: result.repositoryUrl,
                 filePath: result.filePath,
-                fileUrl: result.htmlUrl,
-                commitSha: result.commitSha,
-                commitUrl: result.commitUrl,
-                commitDate: fileCommitDate,
+                fileUrl: anchoredFileUrl,
+                commitSha: commitDetails?.commitSha || result.commitSha,
+                commitUrl: commitDetails?.commitUrl || result.commitUrl,
+                commitDate: commitDetails?.commitDate,
+                committerEmail: commitDetails?.primaryEmail || null,
                 score: fileScore,
                 primaryType,
                 criticality: fileCriticality,
+                committers: commitDetails?.committers && commitDetails.committers.length > 0 ? {
+                  create: commitDetails.committers.map((c: any) => ({
+                    email: c.email,
+                    name: c.name,
+                    commitSha: c.commitSha,
+                    commitDate: c.commitDate
+                  }))
+                } : undefined,
                 secrets: {
                   create: validSecrets.map(s => ({
                     type: s.type,
                     criticality: s.criticality,
                     content: s.content,
                     contentPreview: s.contentPreview,
-                    context: s.context
+                    context: s.context,
+                    lineNumber: s.lineNumber
                   }))
                 }
               },
@@ -543,11 +570,17 @@ class ScannerService {
               });
               const criticality = scoreToCriticality(score);
 
+              let lineNumber: number | undefined;
+              if (typeof secret.matchIndex === 'number' && result.message) {
+                lineNumber = result.message.substring(0, secret.matchIndex).split('\n').length;
+              }
+
               validSecrets.push({
                 type: secret.type,
                 content: secret.content,
                 contentPreview: createPreview(secret.content),
                 context,
+                lineNumber,
                 score,
                 criticality
               });
@@ -556,6 +589,37 @@ class ScannerService {
             if (validSecrets.length === 0) continue;
 
             const { score: fileScore, primaryType, criticality: fileCriticality } = calculateFileCriticalityScore(validSecrets);
+
+            // Determine valid committer emails for commit findings
+            const committersToRecord: Array<{ email: string; name?: string; commitSha: string; commitDate: Date }> = [];
+            const seenCommitters = new Set<string>();
+            let primaryCommitterEmail: string | undefined;
+
+            if (isValidCommitterEmail(result.committerEmail)) {
+              const cleaned = cleanCommitterEmail(result.committerEmail)!;
+              seenCommitters.add(cleaned);
+              committersToRecord.push({
+                email: cleaned,
+                name: result.author,
+                commitSha: result.commitSha,
+                commitDate: result.commitDate
+              });
+              primaryCommitterEmail = cleaned;
+            }
+
+            if (isValidCommitterEmail(result.authorEmail)) {
+              const cleaned = cleanCommitterEmail(result.authorEmail)!;
+              if (!seenCommitters.has(cleaned)) {
+                seenCommitters.add(cleaned);
+                committersToRecord.push({
+                  email: cleaned,
+                  name: result.author,
+                  commitSha: result.commitSha,
+                  commitDate: result.commitDate
+                });
+                if (!primaryCommitterEmail) primaryCommitterEmail = cleaned;
+              }
+            }
 
             const finding = await prisma.finding.create({
               data: {
@@ -567,16 +631,26 @@ class ScannerService {
                 commitSha: result.commitSha,
                 commitUrl: result.commitUrl,
                 commitDate: result.commitDate,
+                committerEmail: primaryCommitterEmail || null,
                 score: fileScore,
                 primaryType,
                 criticality: fileCriticality,
+                committers: committersToRecord.length > 0 ? {
+                  create: committersToRecord.map(c => ({
+                    email: c.email,
+                    name: c.name,
+                    commitSha: c.commitSha,
+                    commitDate: c.commitDate
+                  }))
+                } : undefined,
                 secrets: {
                   create: validSecrets.map(s => ({
                     type: s.type,
                     criticality: s.criticality,
                     content: s.content,
                     contentPreview: s.contentPreview,
-                    context: s.context
+                    context: s.context,
+                    lineNumber: s.lineNumber
                   }))
                 }
               },
@@ -704,11 +778,17 @@ class ScannerService {
                 criticality = scoreToCriticality(score);
               }
 
+              let lineNumber: number | undefined;
+              if (typeof secret.matchIndex === 'number' && content) {
+                lineNumber = content.substring(0, secret.matchIndex).split('\n').length;
+              }
+
               validSecrets.push({
                 type: secret.type,
                 content: secret.content,
                 contentPreview: createPreview(secret.content),
                 context,
+                lineNumber,
                 score,
                 criticality
               });
@@ -734,7 +814,8 @@ class ScannerService {
                     criticality: s.criticality,
                     content: s.content,
                     contentPreview: s.contentPreview,
-                    context: s.context
+                    context: s.context,
+                    lineNumber: s.lineNumber
                   }))
                 }
               },

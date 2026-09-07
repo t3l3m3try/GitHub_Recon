@@ -24,27 +24,35 @@ const CRITICALITY_CARD_STYLES: Record<string, React.CSSProperties> = {
   INFO: { borderColor: 'rgba(107,114,128,0.3)' },
 };
 
-// Escape HTML to prevent injected stylesheets from finding content/context
-const escapeHtml = (text: string) =>
-  text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+// Helper function to highlight search terms safely using React nodes (zero HTML injection risk)
+const highlightText = (text: string | null | undefined, searchTerm: string): React.ReactNode => {
+  if (!text) return '';
+  if (!searchTerm) return text;
 
-// Helper function to highlight search terms (HTML-safe)
-const highlightText = (text: string, searchTerm: string) => {
-  const escaped = escapeHtml(text);
-  if (!searchTerm) return escaped;
-
-  const parts = escaped.split(new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
-  return parts.map((part) =>
-    part.toLowerCase() === searchTerm.toLowerCase()
-      ? `<mark class="bg-yellow-400 text-black font-bold px-1 rounded">${part}</mark>`
-      : part
-  ).join('');
+  const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escapedSearch})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === searchTerm.toLowerCase() ? (
+          <mark key={index} className="bg-yellow-400 text-black font-bold px-1 rounded">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
 };
+
+// Helper function to resolve file URL with line anchor (e.g. #L46)
+function getFileUrlWithLine(fileUrl?: string | null, lineNumber?: number | null): string {
+  if (!fileUrl) return '';
+  if (!lineNumber || lineNumber <= 0) return fileUrl;
+  const baseUrl = fileUrl.split('#')[0];
+  return `${baseUrl}#L${lineNumber}`;
+}
 
 export default function Findings() {
   const queryClient = useQueryClient();
@@ -520,6 +528,11 @@ export default function Findings() {
             const crit = finding.criticality?.toUpperCase() || 'INFO';
             const cardStyle = CRITICALITY_CARD_STYLES[crit] || CRITICALITY_CARD_STYLES.INFO;
             const badgeStyle = CRITICALITY_BADGE_STYLES[crit] || CRITICALITY_BADGE_STYLES.INFO;
+            const allSecrets = [...(finding.secrets || [])].sort((a, b) => {
+              const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+              return (order[a.criticality] ?? 5) - (order[b.criticality] ?? 5);
+            });
+            const primarySecret = allSecrets[0];
             return (
               <div
                 key={finding.id}
@@ -571,22 +584,23 @@ export default function Findings() {
                     </div>
 
                     <div className="space-y-2">
-                      <div className="flex items-center space-x-2 text-sm">
+                      <div className="flex items-center gap-2 text-sm text-gray-400 font-mono flex-wrap">
                         <a
                           href={finding.repositoryUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 hover:text-blue-400 flex items-center space-x-1 transition-all"
+                          className="hover:text-blue-400 flex items-center gap-1 transition-all"
                           
                         >
-                          <span dangerouslySetInnerHTML={{ __html: highlightText(finding.repository, filters.search) }} />
+                          <span>{highlightText(finding.repository, filters.search)}</span>
                           <ExternalLink className="w-4 h-4" />
                         </a>
                         <span className="text-gray-500">•</span>
                         {(() => {
                           // Legacy findings used filePath='issue', newer ones use 'issue-12'. Handle both.
                           const isIssue = finding.filePath?.startsWith('issue-') || (finding.filePath === 'issue' && finding.repositoryUrl?.includes('/issues/'));
-                          const href = finding.fileUrl || (isIssue ? finding.repositoryUrl : `${finding.repositoryUrl}/blob/HEAD/${finding.filePath}`);
+                          const targetFileUrl = getFileUrlWithLine(finding.fileUrl, primarySecret?.lineNumber);
+                          const href = targetFileUrl || (isIssue ? finding.repositoryUrl : `${finding.repositoryUrl}/blob/HEAD/${finding.filePath}`);
 
                           let displayFile = finding.filePath;
                           if (isIssue) {
@@ -598,7 +612,7 @@ export default function Findings() {
                             }
                           }
 
-                          const titleText = isIssue ? "View issue on GitHub" : (finding.filePath === finding.commitSha ? "View commit on GitHub" : "View file on GitHub");
+                          const titleText = isIssue ? "View issue on GitHub" : (finding.filePath === finding.commitSha ? "View commit on GitHub" : (primarySecret?.lineNumber ? `View file at line ${primarySecret.lineNumber} on GitHub` : "View file on GitHub"));
 
                           return (
                             <a
@@ -606,10 +620,14 @@ export default function Findings() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-gray-400 hover:text-gray-200 hover:text-blue-400 flex items-center gap-1 transition-all"
-                              
                               title={titleText}
                             >
-                              <span dangerouslySetInnerHTML={{ __html: highlightText(displayFile, filters.search) }} />
+                              <span>{highlightText(displayFile, filters.search)}</span>
+                              {primarySecret?.lineNumber && (
+                                <span className="text-xs text-blue-400 font-mono font-normal">
+                                  :L{primarySecret.lineNumber}
+                                </span>
+                              )}
                               <ExternalLink className="w-3 h-3 flex-shrink-0" />
                             </a>
                           );
@@ -617,10 +635,6 @@ export default function Findings() {
                       </div>
 
                       {(() => {
-                        const allSecrets = [...(finding.secrets || [])].sort((a, b) => {
-                          const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
-                          return (order[a.criticality] ?? 5) - (order[b.criticality] ?? 5);
-                        });
                         const isExpanded = expandedFindings.has(finding.id);
                         const displaySecrets = isExpanded ? allSecrets : allSecrets.slice(0, 1);
                         const hasMore = allSecrets.length > 1;
@@ -629,7 +643,7 @@ export default function Findings() {
                           <>
                             {displaySecrets.map((secret) => (
                               <div key={secret.id} className="mt-4 p-4 rounded-md transition-all" style={{ border: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(0,0,0,0.25)' }}>
-                                <div className="flex items-center gap-3 mb-2">
+                                <div className="flex items-center gap-3 mb-2 flex-wrap">
                                   <span
                                     className="px-2 py-0.5 rounded-sm text-xs uppercase tracking-wider font-bold"
                                     style={{ ...CRITICALITY_BADGE_STYLES[secret.criticality] }}
@@ -645,6 +659,18 @@ export default function Findings() {
                                   >
                                     {secret.type.replace(/_/g, ' ')}
                                   </span>
+                                  {secret.lineNumber && finding.fileUrl && (
+                                    <a
+                                      href={getFileUrlWithLine(finding.fileUrl, secret.lineNumber)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors ml-auto border border-cyan-500/30 bg-cyan-950/20"
+                                      title={`Open line ${secret.lineNumber} on GitHub`}
+                                    >
+                                      <span>Line {secret.lineNumber}</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
                                 </div>
 
                                 <div className="mb-3 p-3 rounded-sm font-mono text-sm" style={{ border: '1px solid rgba(139,92,246,0.15)', backgroundColor: 'rgba(0,0,0,0.3)' }}>
@@ -652,8 +678,9 @@ export default function Findings() {
                                   <div
                                     className="break-all select-all"
                                     style={{ color: '#C4B5FD' }}
-                                    dangerouslySetInnerHTML={{ __html: highlightText(secret.content, filters.search) }}
-                                  />
+                                  >
+                                    {highlightText(secret.content, filters.search)}
+                                  </div>
                                 </div>
 
                                 <div className="p-3 rounded-sm font-mono text-sm max-h-64 overflow-y-auto" style={{ border: '1px solid rgba(6,182,212,0.2)', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -661,8 +688,9 @@ export default function Findings() {
                                   <pre
                                     className="text-xs whitespace-pre-wrap break-all"
                                     style={{ color: '#93C5FD' }}
-                                    dangerouslySetInnerHTML={{ __html: highlightText(secret.context, filters.search) }}
-                                  />
+                                  >
+                                    {highlightText(secret.context, filters.search)}
+                                  </pre>
                                 </div>
                               </div>
                             ))}
@@ -691,18 +719,27 @@ export default function Findings() {
                       })()}
 
                       <div className="flex items-center gap-4 text-sm flex-wrap mt-4">
-                        {finding.fileUrl && (
-                          <a
-                            href={finding.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 hover:text-blue-400 flex items-center space-x-1 transition-all"
-                            
-                          >
-                            <span>View File</span>
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
+                        {finding.fileUrl && (() => {
+                          const primarySecret = allSecrets[0];
+                          const targetUrl = getFileUrlWithLine(finding.fileUrl, primarySecret?.lineNumber);
+                          return (
+                            <a
+                              href={targetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 flex items-center space-x-1.5 transition-all group"
+                              title={primarySecret?.lineNumber ? `View file at line ${primarySecret.lineNumber} on GitHub` : "View file on GitHub"}
+                            >
+                              <span>View File</span>
+                              {primarySecret?.lineNumber && (
+                                <span className="text-xs px-1.5 py-0.5 rounded font-mono text-blue-300 bg-blue-900/30 border border-blue-500/30">
+                                  #L{primarySecret.lineNumber}
+                                </span>
+                              )}
+                              <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                            </a>
+                          );
+                        })()}
                         {finding.commitUrl && (
                           <a
                             href={finding.commitUrl}
@@ -718,6 +755,23 @@ export default function Findings() {
                       </div>
 
                       <div className="flex items-center gap-4 text-xs flex-wrap" >
+                        {finding.committerEmail && (
+                          <span
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono transition-colors cursor-pointer hover:border-violet-500/50"
+                            style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)', color: '#C4B5FD' }}
+                            title="Committer email from git history (Click to filter)"
+                            onClick={() => {
+                              setFilters({ ...filters, search: finding.committerEmail! });
+                              setPage(1);
+                              const newParams = new URLSearchParams(searchParams);
+                              newParams.set('search', finding.committerEmail!);
+                              setSearchParams(newParams);
+                            }}
+                          >
+                            <span className="text-violet-400 font-bold">👤 Committer:</span>
+                            <span className="font-semibold">{finding.committerEmail}</span>
+                          </span>
+                        )}
                         {finding.commitDate ? (
                           <span className="flex items-center gap-1 text-gray-300" title="Date of the last commit that modified this file on GitHub">
                             <span className="text-gray-500 uppercase tracking-wider" >File modified:</span>
