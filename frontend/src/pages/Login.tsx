@@ -33,7 +33,11 @@ export default function Login() {
       }
       setPassword('');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Unable to sign in. Please try again.');
+      if (!err?.response) {
+        setError('Cannot connect to backend server. Please verify the backend is running on port 3001.');
+      } else {
+        setError(err?.response?.data?.error || 'Unable to sign in. Please try again.');
+      }
       setPassword('');
     } finally {
       setSubmitting(false);
@@ -49,7 +53,11 @@ export default function Login() {
     try {
       await verifyTwoFactor(challengeToken, code);
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Incorrect code. Please try again.');
+      if (!err?.response) {
+        setError('Cannot connect to backend server. Please verify the backend is running on port 3001.');
+      } else {
+        setError(err?.response?.data?.error || 'Incorrect code. Please try again.');
+      }
       setCode('');
     } finally {
       setSubmitting(false);

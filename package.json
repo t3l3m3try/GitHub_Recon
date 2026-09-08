@@ -8,7 +8,8 @@
     "dev:frontend": "cd frontend && npm run dev",
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build"
+    "build:frontend": "cd frontend && npm run build",
+    "db:reset-admin": "npm --prefix backend run db:reset-admin --"
   },
   "keywords": [
     "github",
